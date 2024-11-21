@@ -29,7 +29,7 @@ import tensorflow as tf
 import keras.layers as KL
 import keras.backend as K
 from itertools import combinations
-
+import keras as _K
 # project imports
 from ext.lab2im import utils
 
@@ -48,7 +48,7 @@ def blurring_sigma_for_downsampling(current_res, downsample_res, mult_coef=None,
     :return: standard deviation of the blurring masks given as the same type as downsample_res (list or tensor).
     """
 
-    if not tf.is_tensor(downsample_res):
+    if not tf.is_tensor(downsample_res) and not isinstance(downsample_res, _K.KerasTensor):
 
         # get blurring resolution (min between downsample_res and thickness)
         current_res = np.array(current_res)
@@ -76,12 +76,12 @@ def blurring_sigma_for_downsampling(current_res, downsample_res, mult_coef=None,
         # get std deviation for blurring kernels
         if mult_coef is None:
             sigma = KL.Lambda(lambda x: tf.compat.v1.where(tf.math.equal(x, tf.convert_to_tensor(current_res, dtype='float32')),
-                              0.5, 0.75 * x / tf.convert_to_tensor(current_res, dtype='float32')))(down_res)
+                              0.5, 0.75 * x / tf.convert_to_tensor(current_res, dtype='float32')), output_shape=down_res.shape)(down_res)
         else:
             sigma = KL.Lambda(lambda x: mult_coef * x /
-                              tf.convert_to_tensor(current_res, dtype='float32'))(down_res)
+                              tf.convert_to_tensor(current_res, dtype='float32'), output_shape=down_res.shape)(down_res)
         sigma = KL.Lambda(lambda x: tf.compat.v1.where(
-            tf.math.equal(x[0], 0.), 0., x[1]))([down_res, sigma])
+            tf.math.equal(x[0], 0.), 0., x[1]), output_shape=down_res.shape)([down_res, sigma])
 
     return sigma
 
@@ -106,11 +106,11 @@ def gaussian_kernel(sigma, max_sigma=None, blur_range=None, separable=True):
     shape = sigma_tens.get_shape().as_list()
 
     # get n_dims and batchsize
-    if shape[0] is not None:
-        n_dims = shape[0]
+    if shape[-1] is not None:
+        n_dims = shape[-1]
         batchsize = None
     else:
-        n_dims = shape[1]
+        n_dims = shape[-2]
         batchsize = tf.split(tf.shape(sigma_tens), [1, -1])[0]
 
     # reformat max_sigma
@@ -130,7 +130,6 @@ def gaussian_kernel(sigma, max_sigma=None, blur_range=None, separable=True):
     windowsize = np.int32(np.ceil(2.5 * max_sigma) / 2) * 2 + 1
 
     if separable:
-
         split_sigma = tf.split(sigma_tens, [1] * n_dims, axis=-1)
 
         kernels = list()
@@ -150,7 +149,8 @@ def gaussian_kernel(sigma, max_sigma=None, blur_range=None, separable=True):
                     comb[i] += 1
 
                 # compute gaussians
-                exp_term = -K.square(locations) / (2 * split_sigma[i] ** 2)
+                exp_term = -_K.ops.square(locations) / \
+                    (2 * split_sigma[i] ** 2)
                 g = tf.exp(
                     exp_term - tf.math.log(np.sqrt(2 * np.pi) * split_sigma[i]))
                 g = g / tf.reduce_sum(g)
@@ -182,8 +182,8 @@ def gaussian_kernel(sigma, max_sigma=None, blur_range=None, separable=True):
 
         # compute gaussians
         sigma_is_0 = tf.equal(sigma_tens, 0)
-        exp_term = -K.square(diff) / (2 * tf.compat.v1.where(sigma_is_0,
-                                                             tf.ones_like(sigma_tens), sigma_tens)**2)
+        exp_term = -ops.square(diff) / (2 * tf.compat.v1.where(sigma_is_0,
+                                                               tf.ones_like(sigma_tens), sigma_tens)**2)
         norms = exp_term - tf.math.log(tf.compat.v1.where(
             sigma_is_0, tf.ones_like(sigma_tens), np.sqrt(2 * np.pi) * sigma_tens))
         kernels = K.sum(norms, -1)

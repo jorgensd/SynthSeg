@@ -289,7 +289,7 @@ def build_qc_loss(input_model):
 
     # get loss
     loss = KL.Lambda(lambda x: K.sum(
-        K.mean(K.square(x[0] - x[1]), axis=0)), name='qc_loss')([dice_gt, dice_pred])
+        K.mean(ops.square(x[0] - x[1]), axis=0)), name='qc_loss')([dice_gt, dice_pred])
     loss._keras_shape = tuple(loss.get_shape().as_list())
 
     return models.Model(inputs=input_model.inputs, outputs=loss)

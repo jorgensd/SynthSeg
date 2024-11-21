@@ -441,13 +441,12 @@ class RandomFlip(Layer):
             return tf.cast(inputs[0], types[0])
 
     def _single_swap(self, inputs):
-        return ops.switch(inputs[1], tf.gather(self.swap_lut, inputs[0]), inputs[0])
+        return ops.switch(inputs[1], [lambda: tf.gather(self.swap_lut, inputs[0]), lambda:inputs[0]])
 
     @staticmethod
     def _single_flip(inputs):
         flip_axis = tf.compat.v1.where(inputs[1])
-        breakpoint()
-        return ops.switch(tf.equal(tf.size(flip_axis), 0), inputs[0], tf.reverse(inputs[0], axis=flip_axis[..., 0]))
+        return ops.switch(tf.equal(tf.size(flip_axis), 0), [lambda: inputs[0], lambda: tf.reverse(inputs[0], axis=flip_axis[..., 0])])
 
 
 class SampleConditionalGMM(Layer):
@@ -662,16 +661,16 @@ class SampleResolution(Layer):
             new_resolution_iso = tf.random.uniform(
                 shape, minval=self.min_res, maxval=self.max_res_iso)
             new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_min)),
-                                        self.min_res_tens,
-                                        new_resolution_iso)
+                                        [lambda:self.min_res_tens,
+                                        lambda:new_resolution_iso])
 
         # sample anisotropic resolution only
         elif (self.max_res_iso is None) & (self.max_res_aniso is not None):
             new_resolution_aniso = tf.random.uniform(
                 shape, minval=self.min_res, maxval=self.max_res_aniso)
             new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_min)),
-                                        self.min_res_tens,
-                                        tf.compat.v1.where(mask, new_resolution_aniso, self.min_res_tens))
+                                        [lambda: self.min_res_tens,
+                                        lambda: tf.compat.v1.where(mask, new_resolution_aniso, self.min_res_tens)])
 
         # sample either anisotropic or isotropic resolution
         else:
@@ -680,11 +679,11 @@ class SampleResolution(Layer):
             new_resolution_aniso = tf.random.uniform(
                 shape, minval=self.min_res, maxval=self.max_res_aniso)
             new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_iso)),
-                                        new_resolution_iso,
-                                        tf.compat.v1.where(mask, new_resolution_aniso, self.min_res_tens))
+                                        [lambda: new_resolution_iso,
+                                        lambda: tf.compat.v1.where(mask, new_resolution_aniso, self.min_res_tens)])
             new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_min)),
-                                        self.min_res_tens,
-                                        new_resolution)
+                                        [lambda: self.min_res_tens,
+                                        lambda: new_resolution])
 
         if self.return_thickness:
             return [new_resolution, tf.random.uniform(tf.shape(self.min_res_tens), self.min_res_tens, new_resolution)]
@@ -801,7 +800,7 @@ class GaussianBlur(Layer):
                         maskb = tf.cast(mask, 'float32')
                         maskb = tf.concat([self.convnd(tf.expand_dims(maskb[..., n], -1), k, self.stride, 'SAME')
                                            for n in range(self.n_channels)], -1)
-                        image = image / (maskb + K.epsilon())
+                        image = image / (maskb + ops.epsilon())
                         image = tf.compat.v1.where(
                             mask, image, tf.zeros_like(image))
         else:
@@ -812,7 +811,7 @@ class GaussianBlur(Layer):
                     maskb = tf.cast(mask, 'float32')
                     maskb = tf.concat([self.convnd(tf.expand_dims(maskb[..., n], -1), self.kernels, self.stride, 'SAME')
                                        for n in range(self.n_channels)], -1)
-                    image = image / (maskb + K.epsilon())
+                    image = image / (maskb + ops.epsilon())
                     image = tf.compat.v1.where(
                         mask, image, tf.zeros_like(image))
 
@@ -1018,7 +1017,7 @@ class MimicAcquisition(Layer):
         inshape_tens = tf.tile(tf.expand_dims(
             tf.convert_to_tensor(self.inshape[:-1]), 0), tile_shape)
         inshape_tens = l2i_et.expand_dims(inshape_tens, axis=[1] * self.n_dims)
-        down_loc = K.clip(down_loc, 0., tf.cast(inshape_tens, 'float32'))
+        down_loc = ops.clip(down_loc, 0., tf.cast(inshape_tens, 'float32'))
         vol = tf.map_fn(self._single_down_interpn, [vol, down_loc], tf.float32)
 
         # add noise with predefined probability
@@ -1031,7 +1030,7 @@ class MimicAcquisition(Layer):
                 vol += noise
             else:
                 vol = ops.switch(tf.squeeze(ops.less(tf.random.uniform(
-                    [1], 0, 1), self.prob_noise)), vol + noise, vol)
+                    [1], 0, 1), self.prob_noise)), [lambda: vol + noise, lambda: vol])
 
         # upsample
         up_loc = tf.tile(self.up_grid, tf.concat(
@@ -1173,9 +1172,9 @@ class BiasFieldCorruption(Layer):
                 rand_trans = tf.squeeze(
                     ops.less(tf.random.uniform([1], 0, 1), self.prob))
                 if self.several_inputs:
-                    return [ops.switch(rand_trans, tf.math.multiply(bias_field, v), v) for v in inputs]
+                    return [ops.switch(rand_trans, [lambda: tf.math.multiply(bias_field, v), lambda: v]) for v in inputs]
                 else:
-                    return ops.switch(rand_trans, tf.math.multiply(bias_field, inputs[0]), inputs[0])
+                    return ops.switch(rand_trans, [lambda: tf.math.multiply(bias_field, inputs[0]), lambda: inputs[0]])
 
         else:
             return inputs
@@ -1304,7 +1303,7 @@ class IntensityAugmentation(Layer):
 
         # clip images to given values
         if self.clip_values is not None:
-            inputs = K.clip(inputs, self.clip_values[0], self.clip_values[1])
+            inputs = ops.clip(inputs, self.clip_values[0], self.clip_values[1])
 
         # normalise
         if self.normalise:
@@ -1323,9 +1322,9 @@ class IntensityAugmentation(Layer):
                     int(self.perc[1] * self.flatten_shape), self.flatten_shape - 1), ...]
             # simple min and max
             else:
-                m = K.min(inputs, axis=list(
+                m = ops.min(inputs, axis=list(
                     range(1, self.expand_minmax_dim + 1)))
-                M = K.max(inputs, axis=list(
+                M = ops.max(inputs, axis=list(
                     range(1, self.expand_minmax_dim + 1)))
             # normalise
             m = l2i_et.expand_dims(m, axis=[1] * self.expand_minmax_dim)
@@ -1442,10 +1441,10 @@ class DiceLoss(Layer):
         gt = inputs[0]
         pred = inputs[1]
         if self.enable_checks:  # disabling is useful to, e.g., use incomplete label maps
-            gt = K.clip(gt / (tf.math.reduce_sum(gt, axis=-1,
-                        keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
-            pred = K.clip(pred / (tf.math.reduce_sum(pred, axis=-1,
-                          keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
+            gt = ops.clip(gt / (tf.math.reduce_sum(gt, axis=-1,
+                                                   keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
+            pred = ops.clip(pred / (tf.math.reduce_sum(pred, axis=-1,
+                                                       keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
 
         # compute dice loss for each label
         top = 2 * gt * pred
@@ -1525,7 +1524,7 @@ class WeightedL2Loss(Layer):
         gt = inputs[0]
         pred = inputs[1]
         weights = tf.expand_dims(1 - gt[..., 0] + 1e-8, -1)
-        return K.sum(weights * K.square(pred - self.target_value * (2 * gt - 1))) / (K.sum(weights) * self.n_labels)
+        return ops.sum(weights * ops.square(pred - self.target_value * (2 * gt - 1))) / (ops.sum(weights) * self.n_labels)
 
     def compute_output_shape(self, input_shape):
         return [[]]
@@ -1611,12 +1610,12 @@ class CrossEntropyLoss(Layer):
         gt = inputs[0]
         pred = inputs[1]
         if self.enable_checks:  # disabling is useful to, e.g., use incomplete label maps
-            gt = K.clip(gt / (tf.math.reduce_sum(gt, axis=-1,
-                        keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
+            gt = ops.clip(gt / (tf.math.reduce_sum(gt, axis=-1,
+                                                   keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
             pred = pred / (tf.math.reduce_sum(pred, axis=-1,
                            keepdims=True) + tf.keras.backend.epsilon())
-            pred = K.clip(pred, tf.keras.backend.epsilon(), 1 -
-                          tf.keras.backend.epsilon())  # to avoid log(0)
+            pred = ops.clip(pred, tf.keras.backend.epsilon(), 1 -
+                            tf.keras.backend.epsilon())  # to avoid log(0)
 
         # compare prediction/target, ce has the same shape has the input tensors
         ce = -gt * tf.math.log(pred)
@@ -1994,7 +1993,7 @@ class MaskEdges(Layer):
             mask = mask * tmp_mask
 
         # mask second_channel
-        tensor = ops.switch(tf.squeeze(K.greater(tf.random.uniform([1], 0, 1), 1 - self.prob_mask)),
+        tensor = ops.switch(tf.squeeze(ops.greater(tf.random.uniform([1], 0, 1), 1 - self.prob_mask)),
                             inputs * mask,
                             inputs)
 
@@ -2215,7 +2214,7 @@ class RandomDilationErosion(Layer):
 
     def _single_blur(self, inputs):
         # dilate...
-        new_mask = ops.switch(K.greater(tf.squeeze(inputs[2]), 1 - self.prob + 0.001),
+        new_mask = ops.switch(ops.greater(tf.squeeze(inputs[2]), 1 - self.prob + 0.001),
                               tf.cast(tf.greater(tf.squeeze(self.convnd(tf.expand_dims(inputs[0], 0), inputs[1],
                                                                         [1] * (self.n_dims + 2), padding='SAME'), axis=0), 0.01), dtype='float32'),
                               inputs[0])

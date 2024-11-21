@@ -19,18 +19,17 @@ implied. See the License for the specific language governing permissions and lim
 License.
 """
 
+from ext.lab2im import utils
+from SynthSeg.brain_generator import BrainGenerator
 import sys
 from pathlib import Path
 cwd = Path.cwd().absolute()
 sys.path.append(cwd.as_posix())
 
 
-from SynthSeg.brain_generator import BrainGenerator
-
-from ext.lab2im import utils
 # generate an image from the label map.
 brain_generator = BrainGenerator(
-   (cwd / 'data/training_label_maps/training_seg_01.nii.gz').as_posix())
+    (cwd / 'data/training_label_maps/training_seg_01.nii.gz').as_posix(), flipping=True)
 im, lab = brain_generator.generate_brain()
 
 # save output image and label map under SynthSeg/generated_examples
