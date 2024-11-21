@@ -20,6 +20,7 @@ import itertools
 import numpy as np
 import tensorflow as tf
 import keras.backend as K
+import keras.ops as ops
 
 
 def interpn(vol, loc, interp_method='linear'):
@@ -53,7 +54,7 @@ def interpn(vol, loc, interp_method='linear'):
                         % (nb_dims, len(vol.shape)))
 
     if len(vol.shape) == nb_dims:
-        vol = tf.expand_dims(vol, -1)
+        vol = ops.expand_dims(vol, -1)
 
     # flatten and float location Tensors
     loc = tf.cast(loc, 'float32')
@@ -109,7 +110,7 @@ def interpn(vol, loc, interp_method='linear'):
             # if c[d] is 1 --> want weight = pt - floor[pt] = diff_loc0
             wts_lst = [weights_loc[c[d]][d] for d in range(nb_dims)]
             wt = prod_n(wts_lst)
-            wt = tf.expand_dims(wt, -1)
+            wt = ops.expand_dims(wt, -1)
 
             # compute final weighted value for each cube corner
             interp_vol += wt * vol_val

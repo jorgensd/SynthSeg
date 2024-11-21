@@ -22,6 +22,7 @@ import numpy as np
 import tensorflow as tf
 import keras.layers as KL
 import keras.backend as K
+import keras.ops as ops
 from keras.models import Model
 
 # project imports
@@ -916,13 +917,13 @@ class MakeShape(KL.Layer):
         mask = tf.logical_and(tf.not_equal(x, 0), tf.not_equal(x, 24))
         indices = tf.cast(tf.compat.v1.where(mask), 'int32')
 
-        min_idx = K.legacy.backend.switch(tf.equal(tf.shape(indices)[0], 0),
-                                          tf.zeros(self.n_dims, dtype='int32'),
-                                          tf.maximum(tf.reduce_min(indices, axis=0), 0))
-        max_idx = K.legacy.backend.switch(tf.equal(tf.shape(indices)[0], 0),
-                                          tf.minimum(
-                                              shape, self.cropping_shape),
-                                          tf.minimum(tf.reduce_max(indices, axis=0) + 1, shape))
+        min_idx = ops.switch(tf.equal(tf.shape(indices)[0], 0),
+                             tf.zeros(self.n_dims, dtype='int32'),
+                             tf.maximum(tf.reduce_min(indices, axis=0), 0))
+        max_idx = ops.switch(tf.equal(tf.shape(indices)[0], 0),
+                             tf.minimum(
+            shape, self.cropping_shape),
+            tf.minimum(tf.reduce_max(indices, axis=0) + 1, shape))
 
         # expand/retract (depending on the desired shape) the cropping region around the centre
         intermediate_vol_shape = max_idx - min_idx
@@ -940,9 +941,9 @@ class MakeShape(KL.Layer):
         # pad if necessary
         min_padding = tf.abs(tf.minimum(min_idx, 0))
         max_padding = tf.maximum(max_idx - shape, 0)
-        x = K.legacy.backend.switch(tf.reduce_any(tf.logical_or(tf.greater(min_padding, 0), tf.greater(max_padding, 0))),
-                                    tf.pad(x, tf.stack(
-                                        [min_padding, max_padding], axis=1)),
-                                    x)
+        x = ops.switch(tf.reduce_any(tf.logical_or(tf.greater(min_padding, 0), tf.greater(max_padding, 0))),
+                       tf.pad(x, tf.stack(
+                           [min_padding, max_padding], axis=1)),
+                       x)
 
         return x

@@ -1316,7 +1316,7 @@ class IntensityAugmentation(Layer):
                 else:
                     shape = tf.concat(
                         [batchsize, self.flatten_shape * self.one], 0)
-                intensities = tf.sort(tf.reshape(inputs, shape), axis=1)
+                intensities = tf.sort(ops.reshape(inputs, shape), axis=1)
                 m = intensities[:, max(
                     int(self.perc[0] * self.flatten_shape), 0), ...]
                 M = intensities[:, min(
