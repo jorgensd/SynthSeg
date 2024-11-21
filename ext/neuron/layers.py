@@ -68,7 +68,8 @@ class SpatialTransformer(Layer):
         self.single_transform = single_transform
         self.is_affine = list()
 
-        assert indexing in ['ij', 'xy'], "indexing has to be 'ij' (matrix) or 'xy' (cartesian)"
+        assert indexing in [
+            'ij', 'xy'], "indexing has to be 'ij' (matrix) or 'xy' (cartesian)"
         self.indexing = indexing
 
         super(self.__class__, self).__init__(**kwargs)
@@ -113,11 +114,13 @@ class SpatialTransformer(Layer):
             if self.is_affine[i] and len(shape) == 1:
                 ex = self.ndims * (self.ndims + 1)
                 if shape[0] != ex:
-                    raise Exception('Expected flattened affine of len %d but got %d' % (ex, shape[0]))
+                    raise Exception(
+                        'Expected flattened affine of len %d but got %d' % (ex, shape[0]))
 
             if not self.is_affine[i]:
                 if shape[-1] != self.ndims:
-                    raise Exception('Offset flow field size expected: %d, found: %d' % (self.ndims, shape[-1]))
+                    raise Exception('Offset flow field size expected: %d, found: %d' % (
+                        self.ndims, shape[-1]))
 
         # confirm built
         self.built = True
@@ -129,17 +132,19 @@ class SpatialTransformer(Layer):
         """
 
         # check shapes
-        assert 1 < len(inputs) < 4, "inputs has to be len 2 or 3, found: %d" % len(inputs)
+        assert 1 < len(
+            inputs) < 4, "inputs has to be len 2 or 3, found: %d" % len(inputs)
         vol = inputs[0]
         trf = inputs[1:]
 
         # necessary for multi_gpu models...
-        vol = K.reshape(vol, [-1, *self.inshape[0][1:]])
+        vol = tf.reshape(vol, [-1, *self.inshape[0][1:]])
         for i in range(len(trf)):
-            trf[i] = K.reshape(trf[i], [-1, *self.inshape[i+1][1:]])
+            trf[i] = tf.reshape(trf[i], [-1, *self.inshape[i+1][1:]])
 
         # reorder transforms, non-linear first and affine second
-        ind_nonlinear_linear = [i[0] for i in sorted(enumerate(self.is_affine), key=lambda x:x[1])]
+        ind_nonlinear_linear = [i[0] for i in sorted(
+            enumerate(self.is_affine), key=lambda x: x[1])]
         self.is_affine = [self.is_affine[i] for i in ind_nonlinear_linear]
         self.inshape = [self.inshape[i] for i in ind_nonlinear_linear]
         trf = [trf[i] for i in ind_nonlinear_linear]
@@ -148,10 +153,12 @@ class SpatialTransformer(Layer):
         if len(trf) == 1:
             trf = trf[0]
             if self.is_affine[0]:
-                trf = tf.map_fn(lambda x: self._single_aff_to_shift(x, vol.shape[1:-1]), trf, dtype=tf.float32)
+                trf = tf.map_fn(lambda x: self._single_aff_to_shift(
+                    x, vol.shape[1:-1]), trf, dtype=tf.float32)
         # combine non-linear and affine to obtain a single deformation field
         elif len(trf) == 2:
-            trf = tf.map_fn(lambda x: self._non_linear_and_aff_to_shift(x, vol.shape[1:-1]), trf, dtype=tf.float32)
+            trf = tf.map_fn(lambda x: self._non_linear_and_aff_to_shift(
+                x, vol.shape[1:-1]), trf, dtype=tf.float32)
 
         # prepare location shift
         if self.indexing == 'xy':  # shift the first two dimensions
@@ -204,7 +211,8 @@ class VecInt(Layer):
             out_time_pt is time point at which to output if using odeint integration
         """
 
-        assert indexing in ['ij', 'xy'], "indexing has to be 'ij' (matrix) or 'xy' (cartesian)"
+        assert indexing in [
+            'ij', 'xy'], "indexing has to be 'ij' (matrix) or 'xy' (cartesian)"
         self.indexing = indexing
         self.method = method
         self.int_steps = int_steps
@@ -236,7 +244,8 @@ class VecInt(Layer):
         self.inshape = trf_shape
 
         if trf_shape[-1] != len(trf_shape) - 2:
-            raise Exception('transform ndims %d does not match expected ndims %d' % (trf_shape[-1], len(trf_shape) - 2))
+            raise Exception('transform ndims %d does not match expected ndims %d' % (
+                trf_shape[-1], len(trf_shape) - 2))
 
     def call(self, inputs, **kwargs):
         if not isinstance(inputs, (list, tuple)):
@@ -244,19 +253,21 @@ class VecInt(Layer):
         loc_shift = inputs[0]
 
         # necessary for multi_gpu models...
-        loc_shift = K.reshape(loc_shift, [-1, *self.inshape[1:]])
+        loc_shift = tf.reshape(loc_shift, [-1, *self.inshape[1:]])
 
         # prepare location shift
         if self.indexing == 'xy':  # shift the first two dimensions
             loc_shift_split = tf.split(loc_shift, loc_shift.shape[-1], axis=-1)
-            loc_shift_lst = [loc_shift_split[1], loc_shift_split[0], *loc_shift_split[2:]]
+            loc_shift_lst = [loc_shift_split[1],
+                             loc_shift_split[0], *loc_shift_split[2:]]
             loc_shift = tf.concat(loc_shift_lst, -1)
 
         if len(inputs) > 1:
             assert self.out_time_pt is None, 'out_time_pt should be None if providing batch_based out_time_pt'
 
         # map transform across batch
-        out = tf.map_fn(self._single_int, [loc_shift] + inputs[1:], dtype=tf.float32)
+        out = tf.map_fn(self._single_int, [
+                        loc_shift] + inputs[1:], dtype=tf.float32)
         return out
 
     def _single_int(self, inputs):
@@ -337,9 +348,11 @@ class Resize(Layer):
         elif isinstance(self.zoom_factor, (list, tuple)):
             self.zoom_factor0 = deepcopy(self.zoom_factor)
             assert len(self.zoom_factor0) == self.ndims, \
-                'zoom factor length {} does not match number of dimensions {}'.format(len(self.zoom_factor), self.ndims)
+                'zoom factor length {} does not match number of dimensions {}'.format(
+                    len(self.zoom_factor), self.ndims)
         else:
-            raise Exception('zoom_factor should be an int or a list/tuple of int (or None if size is not set to None)')
+            raise Exception(
+                'zoom_factor should be an int or a list/tuple of int (or None if size is not set to None)')
 
         # check size
         if isinstance(self.size, int):
@@ -349,14 +362,17 @@ class Resize(Layer):
         elif isinstance(self.size, (list, tuple)):
             self.size0 = deepcopy(self.size)
             assert len(self.size0) == self.ndims, \
-                'size length {} does not match number of dimensions {}'.format(len(self.size0), self.ndims)
+                'size length {} does not match number of dimensions {}'.format(
+                    len(self.size0), self.ndims)
         else:
-            raise Exception('size should be an int or a list/tuple of int (or None if zoom_factor is not set to None)')
+            raise Exception(
+                'size should be an int or a list/tuple of int (or None if zoom_factor is not set to None)')
 
         # confirm built
         self.built = True
 
-        super(Resize, self).build(input_shape)  # Be sure to call this somewhere!
+        # Be sure to call this somewhere!
+        super(Resize, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
         """
@@ -366,19 +382,22 @@ class Resize(Layer):
 
         # check shapes
         if isinstance(inputs, (list, tuple)):
-            assert len(inputs) == 1, "inputs has to be len 1. found: %d" % len(inputs)
+            assert len(
+                inputs) == 1, "inputs has to be len 1. found: %d" % len(inputs)
             vol = inputs[0]
         else:
             vol = inputs
 
         # necessary for multi_gpu models...
-        vol = K.reshape(vol, [-1, *self.inshape[1:]])
+        vol = tf.reshape(vol, [-1, *self.inshape[1:]])
 
         # set value of missing size or zoom_factor
         if not any(self.zoom_factor0):
-            self.zoom_factor0 = [self.size0[i] / self.inshape[i+1] for i in range(self.ndims)]
+            self.zoom_factor0 = [self.size0[i] / self.inshape[i+1]
+                                 for i in range(self.ndims)]
         else:
-            self.size0 = [int(self.inshape[f+1] * self.zoom_factor0[f]) for f in range(self.ndims)]
+            self.size0 = [int(self.inshape[f+1] * self.zoom_factor0[f])
+                          for f in range(self.ndims)]
 
         # map transform across batch
         return tf.map_fn(self._single_resize, vol, dtype=vol.dtype)
@@ -386,7 +405,8 @@ class Resize(Layer):
     def compute_output_shape(self, input_shape):
 
         output_shape = [input_shape[0]]
-        output_shape += [int(input_shape[1:-1][f] * self.zoom_factor0[f]) for f in range(self.ndims)]
+        output_shape += [int(input_shape[1:-1][f] * self.zoom_factor0[f])
+                         for f in range(self.ndims)]
         output_shape += [input_shape[-1]]
         return tuple(output_shape)
 
@@ -426,7 +446,8 @@ class LocalBias(Layer):
                                       shape=input_shape[1:],
                                       initializer=self.initializer,
                                       trainable=True)
-        super(LocalBias, self).build(input_shape)  # Be sure to call this somewhere!
+        # Be sure to call this somewhere!
+        super(LocalBias, self).build(input_shape)
 
     def call(self, x, **kwargs):
         return x + self.kernel * self.biasmult  # weights are difference from input

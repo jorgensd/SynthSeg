@@ -681,7 +681,7 @@ def single_ae(enc_size,
                 last_tensor = convL(enc_size[-1], conv_size, name=name, **conv_kwargs)(pre_enc_layer)
 
                 name = '%s_ae_sigma_enc' % prefix
-                resize_fn = lambda x: tf.image.resize_bilinear(x, enc_size[:-1])
+                resize_fn = lambda x: tf.image.resize(x, enc_size[:-1], method=tf.image.ResizeMethod.BILINEAR)
                 last_tensor = KL.Lambda(resize_fn, name=name)(last_tensor)
 
             elif enc_size[-1] is None:  # convolutional, but won't tell us bottleneck

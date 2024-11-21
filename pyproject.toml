@@ -1,0 +1,19 @@
+[build-system] # Require setuptool version due to https://github.com/pypa/setuptools/issues/2938
+requires = ["setuptools>=61.0.0", "wheel"]
+
+[project]
+name = "SynthSeg"
+version = "2.0"
+description = 'Domain-agnostic segmentation of brain scans'
+authors = [{ name = "Benjamin Billot" }]
+license = { file = "LICENSE.txt" }
+readme = "README.md"
+dependencies = [
+    "numpy",
+    "tensorflow",
+    "nibabel",
+    "scipy",
+    "keras",
+    "keras-preprocessing",
+    "keras-applications",
+]

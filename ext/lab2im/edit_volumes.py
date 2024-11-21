@@ -2144,9 +2144,9 @@ def smoothing_gpu_model(label_shape, label_list, connectivity=1):
     k = utils.add_axis(utils.build_binary_structure(connectivity, n_dims, shape=n_dims), axis=[-1, -1])
     kernel = KL.Lambda(lambda x: tf.convert_to_tensor(k, dtype='float32'))([])
     split = KL.Lambda(lambda x: tf.split(x, [1] * n_labels, axis=-1))(labels)
-    labels = KL.Lambda(lambda x: tf.nn.convolution(x[0], x[1], padding='SAME'))([split[0], kernel])
+    labels = KL.Lambda(lambda x: tf.nn.convolution(x[0], filters=x[1], padding='SAME'))([split[0], kernel])
     for i in range(1, n_labels):
-        tmp = KL.Lambda(lambda x: tf.nn.convolution(x[0], x[1], padding='SAME'))([split[i], kernel])
+        tmp = KL.Lambda(lambda x: tf.nn.convolution(x[0], filters=x[1], padding='SAME'))([split[i], kernel])
         labels = KL.Lambda(lambda x: tf.concat([x[0], x[1]], -1))([labels, tmp])
 
     # take the argmax and convert labels to original values

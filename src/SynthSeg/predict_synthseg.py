@@ -84,34 +84,45 @@ def predict(path_images,
     compute = outputs[8]
 
     # get label lists
-    labels_segmentation, _ = utils.get_list_labels(label_list=labels_segmentation)
+    labels_segmentation, _ = utils.get_list_labels(
+        label_list=labels_segmentation)
     if (n_neutral_labels is not None) & (not fast) & (not robust):
-        labels_segmentation, flip_indices, unique_idx = get_flip_indices(labels_segmentation, n_neutral_labels)
+        labels_segmentation, flip_indices, unique_idx = get_flip_indices(
+            labels_segmentation, n_neutral_labels)
     else:
-        labels_segmentation, unique_idx = np.unique(labels_segmentation, return_index=True)
+        labels_segmentation, unique_idx = np.unique(
+            labels_segmentation, return_index=True)
         flip_indices = None
 
     # prepare other labels list
     if names_segmentation is not None:
-        names_segmentation = utils.load_array_if_path(names_segmentation)[unique_idx]
+        names_segmentation = utils.load_array_if_path(names_segmentation)[
+            unique_idx]
     if topology_classes is not None:
-        topology_classes = utils.load_array_if_path(topology_classes, load_as_numpy=True)[unique_idx]
+        topology_classes = utils.load_array_if_path(
+            topology_classes, load_as_numpy=True)[unique_idx]
     labels_denoiser = np.unique(utils.get_list_labels(labels_denoiser)[0])
     if do_parcellation:
-        labels_parcellation, unique_i_parc = np.unique(utils.get_list_labels(labels_parcellation)[0], return_index=True)
-        labels_volumes = np.concatenate([labels_segmentation, labels_parcellation[1:]])
+        labels_parcellation, unique_i_parc = np.unique(
+            utils.get_list_labels(labels_parcellation)[0], return_index=True)
+        labels_volumes = np.concatenate(
+            [labels_segmentation, labels_parcellation[1:]])
         if (names_parcellation is not None) & (names_segmentation is not None):
-            names_parcellation = utils.load_array_if_path(names_parcellation)[unique_i_parc][1:]
-            names_volumes = np.concatenate([names_segmentation, names_parcellation])
+            names_parcellation = utils.load_array_if_path(names_parcellation)[
+                unique_i_parc][1:]
+            names_volumes = np.concatenate(
+                [names_segmentation, names_parcellation])
         else:
             names_volumes = names_segmentation
     else:
         labels_volumes = labels_segmentation
         names_volumes = names_segmentation
     if not v1:
-        labels_volumes = np.concatenate([labels_volumes, np.array([np.max(labels_volumes + 1)])])
+        labels_volumes = np.concatenate(
+            [labels_volumes, np.array([np.max(labels_volumes + 1)])])
         if names_segmentation is not None:
-            names_volumes = np.concatenate([names_volumes, np.array(['total intracranial'])])
+            names_volumes = np.concatenate(
+                [names_volumes, np.array(['total intracranial'])])
     do_qc = True if path_qc_scores[0] is not None else False
     if do_qc:
         labels_qc = utils.get_list_labels(labels_qc)[0][unique_idx]
@@ -120,7 +131,8 @@ def predict(path_images,
 
     # prepare volume/QC files if necessary
     if unique_vol_file & (path_volumes[0] is not None):
-        write_csv(path_volumes[0], None, True, labels_volumes, names_volumes, last_first=(not v1))
+        write_csv(path_volumes[0], None, True, labels_volumes,
+                  names_volumes, last_first=(not v1))
     if unique_qc_file & do_qc:
         write_csv(path_qc_scores[0], None, True, labels_qc, names_qc)
 
@@ -171,12 +183,15 @@ def predict(path_images,
                 # prediction
                 shape_input = utils.add_axis(np.array(image.shape[1:-1]))
                 if do_parcellation & do_qc:
-                    post_patch_segmentation, post_patch_parcellation, qc_score = net.predict([image, shape_input])
+                    post_patch_segmentation, post_patch_parcellation, qc_score = net.predict([
+                                                                                             image, shape_input])
                 elif do_parcellation & (not do_qc):
-                    post_patch_segmentation, post_patch_parcellation = net.predict(image)
+                    post_patch_segmentation, post_patch_parcellation = net.predict(
+                        image)
                     qc_score = None
                 elif (not do_parcellation) & do_qc:
-                    post_patch_segmentation, qc_score = net.predict([image, shape_input])
+                    post_patch_segmentation, qc_score = net.predict(
+                        [image, shape_input])
                     post_patch_parcellation = None
                 else:
                     post_patch_segmentation = net.predict(image)
@@ -197,24 +212,32 @@ def predict(path_images,
                                                        v1=v1)
 
                 # write predictions to disc
-                utils.save_volume(seg, aff, h, path_segmentations[i], dtype='int32')
+                utils.save_volume(
+                    seg, aff, h, path_segmentations[i], dtype='int32')
                 if path_posteriors[i] is not None:
-                    utils.save_volume(posteriors, aff, h, path_posteriors[i], dtype='float32')
+                    utils.save_volume(posteriors, aff, h,
+                                      path_posteriors[i], dtype='float32')
 
                 # write volumes to disc if necessary
                 if path_volumes[i] is not None:
-                    row = [os.path.basename(path_images[i]).replace('.nii.gz', '')] + [str(vol) for vol in volumes]
-                    write_csv(path_volumes[i], row, unique_vol_file, labels_volumes, names_volumes, last_first=(not v1))
+                    row = [os.path.basename(path_images[i]).replace(
+                        '.nii.gz', '')] + [str(vol) for vol in volumes]
+                    write_csv(path_volumes[i], row, unique_vol_file,
+                              labels_volumes, names_volumes, last_first=(not v1))
 
                 # write QC scores to disc if necessary
                 if path_qc_scores[i] is not None:
-                    qc_score = np.around(np.clip(np.squeeze(qc_score)[1:], 0, 1), 4)
-                    row = [os.path.basename(path_images[i]).replace('.nii.gz', '')] + ['%.4f' % q for q in qc_score]
-                    write_csv(path_qc_scores[i], row, unique_qc_file, labels_qc, names_qc)
+                    qc_score = np.around(
+                        np.clip(np.squeeze(qc_score)[1:], 0, 1), 4)
+                    row = [os.path.basename(path_images[i]).replace(
+                        '.nii.gz', '')] + ['%.4f' % q for q in qc_score]
+                    write_csv(path_qc_scores[i], row,
+                              unique_qc_file, labels_qc, names_qc)
 
             except Exception as e:
                 list_errors.append(path_images[i])
-                print('\nthe following problem occurred with image %s :' % path_images[i])
+                print('\nthe following problem occurred with image %s :' %
+                      path_images[i])
                 print(traceback.format_exc())
                 print('resuming program execution\n')
                 continue
@@ -232,18 +255,22 @@ def predict(path_images,
             print('QC scores saved in:        ' + path_qc_scores[0])
     else:  # all segmentations are in the same folder, and we have unique vol/QC files
         if len(set([os.path.dirname(path_segmentations[i]) for i in range(len(path_segmentations))])) <= 1:
-            print('\nsegmentations saved in:    ' + os.path.dirname(path_segmentations[0]))
+            print('\nsegmentations saved in:    ' +
+                  os.path.dirname(path_segmentations[0]))
             if path_posteriors[0] is not None:
-                print('posteriors saved in:       ' + os.path.dirname(path_posteriors[0]))
+                print('posteriors saved in:       ' +
+                      os.path.dirname(path_posteriors[0]))
             if path_resampled[0] is not None:
-                print('resampled images saved in: ' + os.path.dirname(path_resampled[0]))
+                print('resampled images saved in: ' +
+                      os.path.dirname(path_resampled[0]))
             if path_volumes[0] is not None:
                 print('volumes saved in:          ' + path_volumes[0])
             if path_qc_scores[0] is not None:
                 print('QC scores saved in:        ' + path_qc_scores[0])
 
     if robust:
-        print('\nIf you use the new robust version of SynthSeg in a publication, please cite:')
+        print(
+            '\nIf you use the new robust version of SynthSeg in a publication, please cite:')
         print('Robust machine learning segmentation for large-scale analysis of heterogeneous clinical brain MRI '
               'datasets')
         print('B. Billot, M. Collin, S.E. Arnold, S. Das, J.E. Iglesias')
@@ -301,9 +328,12 @@ def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, ou
     path_images = os.path.abspath(path_images)
     basename = os.path.basename(path_images)
     out_seg = os.path.abspath(out_seg)
-    out_posteriors = os.path.abspath(out_posteriors) if (out_posteriors is not None) else out_posteriors
-    out_resampled = os.path.abspath(out_resampled) if (out_resampled is not None) else out_resampled
-    out_volumes = os.path.abspath(out_volumes) if (out_volumes is not None) else out_volumes
+    out_posteriors = os.path.abspath(out_posteriors) if (
+        out_posteriors is not None) else out_posteriors
+    out_resampled = os.path.abspath(out_resampled) if (
+        out_resampled is not None) else out_resampled
+    out_volumes = os.path.abspath(out_volumes) if (
+        out_volumes is not None) else out_volumes
     out_qc = os.path.abspath(out_qc) if (out_qc is not None) else out_qc
 
     # path_images is a text file
@@ -311,16 +341,19 @@ def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, ou
 
         # input images
         if not os.path.isfile(path_images):
-            raise Exception('provided text file containing paths of input images does not exist' % path_images)
+            raise Exception(
+                'provided text file containing paths of input images does not exist' % path_images)
         with open(path_images, 'r') as f:
-            path_images = [line.replace('\n', '') for line in f.readlines() if line != '\n']
+            path_images = [line.replace('\n', '')
+                           for line in f.readlines() if line != '\n']
 
         # define helper to deal with outputs
         def text_helper(path, name):
             if path is not None:
                 assert path[-4:] == '.txt', 'if path_images given as text file, so must be %s' % name
                 with open(path, 'r') as ff:
-                    path = [line.replace('\n', '') for line in ff.readlines() if line != '\n']
+                    path = [line.replace('\n', '')
+                            for line in ff.readlines() if line != '\n']
                 recompute_files = [not os.path.isfile(p) for p in path]
             else:
                 path = [None] * len(path_images)
@@ -330,17 +363,22 @@ def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, ou
 
         # use helper on all outputs
         out_seg, recompute_seg, _ = text_helper(out_seg, 'path_segmentations')
-        out_posteriors, recompute_post, _ = text_helper(out_posteriors, 'path_posteriors')
-        out_resampled, recompute_resampled, _ = text_helper(out_resampled, 'path_resampled')
-        out_volumes, recompute_volume, unique_volume_file = text_helper(out_volumes, 'path_volume')
-        out_qc, recompute_qc, unique_qc_file = text_helper(out_qc, 'path_qc_scores')
+        out_posteriors, recompute_post, _ = text_helper(
+            out_posteriors, 'path_posteriors')
+        out_resampled, recompute_resampled, _ = text_helper(
+            out_resampled, 'path_resampled')
+        out_volumes, recompute_volume, unique_volume_file = text_helper(
+            out_volumes, 'path_volume')
+        out_qc, recompute_qc, unique_qc_file = text_helper(
+            out_qc, 'path_qc_scores')
 
     # path_images is a folder
     elif ('.nii.gz' not in basename) & ('.nii' not in basename) & ('.mgz' not in basename) & ('.npz' not in basename):
 
         # input images
         if os.path.isfile(path_images):
-            raise Exception('Extension not supported for %s, only use: nii.gz, .nii, .mgz, or .npz' % path_images)
+            raise Exception(
+                'Extension not supported for %s, only use: nii.gz, .nii, .mgz, or .npz' % path_images)
         path_images = utils.list_images_in_folder(path_images)
 
         # define helper to deal with outputs
@@ -350,18 +388,24 @@ def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, ou
                 assert path[-4:] != '.txt', '%s can only be given as text file when path_images is.' % name
                 if file_type == 'csv':
                     if path[-4:] != '.csv':
-                        print('%s provided without csv extension. Adding csv extension.' % name)
+                        print(
+                            '%s provided without csv extension. Adding csv extension.' % name)
                         path += '.csv'
                     path = [path] * len(path_images)
                     recompute_files = [True] * len(path_images)
                     unique_file = True
                 else:
                     if (path[-7:] == '.nii.gz') | (path[-4:] == '.nii') | (path[-4:] == '.mgz') | (path[-4:] == '.npz'):
-                        raise Exception('Output FOLDER had a FILE extension' % path)
-                    path = [os.path.join(path, os.path.basename(p)) for p in path_images]
-                    path = [p.replace('.nii', '_%s.nii' % suffix) for p in path]
-                    path = [p.replace('.mgz', '_%s.mgz' % suffix) for p in path]
-                    path = [p.replace('.npz', '_%s.npz' % suffix) for p in path]
+                        raise Exception(
+                            'Output FOLDER had a FILE extension' % path)
+                    path = [os.path.join(path, os.path.basename(p))
+                            for p in path_images]
+                    path = [p.replace('.nii', '_%s.nii' % suffix)
+                            for p in path]
+                    path = [p.replace('.mgz', '_%s.mgz' % suffix)
+                            for p in path]
+                    path = [p.replace('.npz', '_%s.npz' % suffix)
+                            for p in path]
                     recompute_files = [not os.path.isfile(p) for p in path]
                 utils.mkdir(os.path.dirname(path[0]))
             else:
@@ -370,11 +414,16 @@ def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, ou
             return path, recompute_files, unique_file
 
         # use helper on all outputs
-        out_seg, recompute_seg, _ = helper_dir(out_seg, 'path_segmentations', '', 'synthseg')
-        out_posteriors, recompute_post, _ = helper_dir(out_posteriors, 'path_posteriors', '', 'posteriors')
-        out_resampled, recompute_resampled, _ = helper_dir(out_resampled, 'path_resampled', '', 'resampled')
-        out_volumes, recompute_volume, unique_volume_file = helper_dir(out_volumes, 'path_volumes', 'csv', '')
-        out_qc, recompute_qc, unique_qc_file = helper_dir(out_qc, 'path_qc_scores', 'csv', '')
+        out_seg, recompute_seg, _ = helper_dir(
+            out_seg, 'path_segmentations', '', 'synthseg')
+        out_posteriors, recompute_post, _ = helper_dir(
+            out_posteriors, 'path_posteriors', '', 'posteriors')
+        out_resampled, recompute_resampled, _ = helper_dir(
+            out_resampled, 'path_resampled', '', 'resampled')
+        out_volumes, recompute_volume, unique_volume_file = helper_dir(
+            out_volumes, 'path_volumes', 'csv', '')
+        out_qc, recompute_qc, unique_qc_file = helper_dir(
+            out_qc, 'path_qc_scores', 'csv', '')
 
     # path_images is an image
     else:
@@ -391,15 +440,19 @@ def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, ou
                 assert path[-4:] != '.txt', '%s can only be given as text file when path_images is.' % name
                 if file_type == 'csv':
                     if path[-4:] != '.csv':
-                        print('%s provided without csv extension. Adding csv extension.' % name)
+                        print(
+                            '%s provided without csv extension. Adding csv extension.' % name)
                         path += '.csv'
                     recompute_files = [True]
                     unique_file = True
                 else:
                     if ('.nii.gz' not in path) & ('.nii' not in path) & ('.mgz' not in path) & ('.npz' not in path):
-                        file_name = os.path.basename(path_images[0]).replace('.nii', '_%s.nii' % suffix)
-                        file_name = file_name.replace('.mgz', '_%s.mgz' % suffix)
-                        file_name = file_name.replace('.npz', '_%s.npz' % suffix)
+                        file_name = os.path.basename(path_images[0]).replace(
+                            '.nii', '_%s.nii' % suffix)
+                        file_name = file_name.replace(
+                            '.mgz', '_%s.mgz' % suffix)
+                        file_name = file_name.replace(
+                            '.npz', '_%s.npz' % suffix)
                         path = os.path.join(path, file_name)
                     recompute_files = [not os.path.isfile(path)]
                 utils.mkdir(os.path.dirname(path))
@@ -409,24 +462,30 @@ def prepare_output_files(path_images, out_seg, out_posteriors, out_resampled, ou
             return path, recompute_files, unique_file
 
         # use helper on all outputs
-        out_seg, recompute_seg, _ = helper_im(out_seg, 'path_segmentations', '', 'synthseg')
-        out_posteriors, recompute_post, _ = helper_im(out_posteriors, 'path_posteriors', '', 'posteriors')
-        out_resampled, recompute_resampled, _ = helper_im(out_resampled, 'path_resampled', '', 'resampled')
-        out_volumes, recompute_volume, unique_volume_file = helper_im(out_volumes, 'path_volumes', 'csv', '')
-        out_qc, recompute_qc, unique_qc_file = helper_im(out_qc, 'path_qc_scores', 'csv', '')
+        out_seg, recompute_seg, _ = helper_im(
+            out_seg, 'path_segmentations', '', 'synthseg')
+        out_posteriors, recompute_post, _ = helper_im(
+            out_posteriors, 'path_posteriors', '', 'posteriors')
+        out_resampled, recompute_resampled, _ = helper_im(
+            out_resampled, 'path_resampled', '', 'resampled')
+        out_volumes, recompute_volume, unique_volume_file = helper_im(
+            out_volumes, 'path_volumes', 'csv', '')
+        out_qc, recompute_qc, unique_qc_file = helper_im(
+            out_qc, 'path_qc_scores', 'csv', '')
 
     recompute_list = [recompute | re_seg | re_post | re_res | re_vol | re_qc
                       for (re_seg, re_post, re_res, re_vol, re_qc)
                       in zip(recompute_seg, recompute_post, recompute_resampled, recompute_volume, recompute_qc)]
 
     return path_images, out_seg, out_posteriors, out_resampled, out_volumes, unique_volume_file, \
-           out_qc, unique_qc_file, recompute_list
+        out_qc, unique_qc_file, recompute_list
 
 
 def preprocess(path_image, ct, target_res=1., n_levels=5, crop=None, min_pad=None, path_resample=None):
 
     # read image and corresponding info
-    im, _, aff, n_dims, n_channels, h, im_res = utils.get_volume_info(path_image, True)
+    im, _, aff, n_dims, n_channels, h, im_res = utils.get_volume_info(
+        path_image, True)
     if n_dims == 2 and 1 < n_channels < 4:
         raise Exception('either the input is 2D with several channels, or is 3D with at most 3 slices. '
                         'Either way, results are going to be poor...')
@@ -445,7 +504,8 @@ def preprocess(path_image, ct, target_res=1., n_levels=5, crop=None, min_pad=Non
         im = im[..., 0]
 
     # resample image if necessary
-    target_res = np.squeeze(utils.reformat_to_n_channels_array(target_res, n_dims))
+    target_res = np.squeeze(
+        utils.reformat_to_n_channels_array(target_res, n_dims))
     if np.any((im_res > target_res + 0.05) | (im_res < target_res - 0.05)):
         im_res = target_res
         im, aff = edit_volumes.resample_volume(im, aff, im_res)
@@ -453,29 +513,36 @@ def preprocess(path_image, ct, target_res=1., n_levels=5, crop=None, min_pad=Non
             utils.save_volume(im, aff, h, path_resample)
 
     # align image
-    im = edit_volumes.align_volume_to_ref(im, aff, aff_ref=np.eye(4), n_dims=n_dims, return_copy=False)
+    im = edit_volumes.align_volume_to_ref(
+        im, aff, aff_ref=np.eye(4), n_dims=n_dims, return_copy=False)
     shape = list(im.shape[:n_dims])
 
     # crop image if necessary
     if crop is not None:
         crop = utils.reformat_to_list(crop, length=n_dims, dtype='int')
-        crop_shape = [utils.find_closest_number_divisible_by_m(s, 2 ** n_levels, 'higher') for s in crop]
-        im, crop_idx = edit_volumes.crop_volume(im, cropping_shape=crop_shape, return_crop_idx=True)
+        crop_shape = [utils.find_closest_number_divisible_by_m(
+            s, 2 ** n_levels, 'higher') for s in crop]
+        im, crop_idx = edit_volumes.crop_volume(
+            im, cropping_shape=crop_shape, return_crop_idx=True)
     else:
         crop_idx = None
 
     # normalise image
     if ct:
         im = np.clip(im, 0, 80)
-    im = edit_volumes.rescale_volume(im, new_min=0., new_max=1., min_percentile=0.5, max_percentile=99.5)
+    im = edit_volumes.rescale_volume(
+        im, new_min=0., new_max=1., min_percentile=0.5, max_percentile=99.5)
 
     # pad image
     input_shape = im.shape[:n_dims]
-    pad_shape = [utils.find_closest_number_divisible_by_m(s, 2 ** n_levels, 'higher') for s in input_shape]
+    pad_shape = [utils.find_closest_number_divisible_by_m(
+        s, 2 ** n_levels, 'higher') for s in input_shape]
     min_pad = utils.reformat_to_list(min_pad, length=n_dims, dtype='int')
-    min_pad = [utils.find_closest_number_divisible_by_m(s, 2 ** n_levels, 'higher') for s in min_pad]
+    min_pad = [utils.find_closest_number_divisible_by_m(
+        s, 2 ** n_levels, 'higher') for s in min_pad]
     pad_shape = np.maximum(pad_shape, min_pad)
-    im, pad_idx = edit_volumes.pad_volume(im, padding_shape=pad_shape, return_pad_idx=True)
+    im, pad_idx = edit_volumes.pad_volume(
+        im, padding_shape=pad_shape, return_pad_idx=True)
 
     # add batch and channel axes
     im = utils.add_axis(im, axis=[0, -1])
@@ -497,7 +564,8 @@ def build_model(path_model_segmentation,
                 do_parcellation,
                 do_qc):
 
-    assert os.path.isfile(path_model_segmentation), "The provided model path does not exist."
+    assert os.path.isfile(
+        path_model_segmentation), "The provided model path does not exist."
 
     # get labels
     n_labels_seg = len(labels_segmentation)
@@ -520,7 +588,8 @@ def build_model(path_model_segmentation,
         # transition between the two networks: one_hot -> argmax -> one_hot (it simulates how the network was trained)
         last_tensor = net.output
         last_tensor = KL.Lambda(lambda x: tf.argmax(x, axis=-1))(last_tensor)
-        last_tensor = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, 'int32'), depth=n_groups, axis=-1))(last_tensor)
+        last_tensor = KL.Lambda(lambda x: tf.one_hot(
+            tf.cast(x, 'int32'), depth=n_groups, axis=-1))(last_tensor)
         net = Model(inputs=net.inputs, outputs=last_tensor)
 
         # build denoiser
@@ -541,10 +610,12 @@ def build_model(path_model_segmentation,
         input_image = net.inputs[0]
         last_tensor = net.output
         last_tensor = KL.Lambda(lambda x: tf.argmax(x, axis=-1))(last_tensor)
-        last_tensor = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, 'int32'), depth=n_groups, axis=-1))(last_tensor)
+        last_tensor = KL.Lambda(lambda x: tf.one_hot(
+            tf.cast(x, 'int32'), depth=n_groups, axis=-1))(last_tensor)
         if n_groups <= 2:
             last_tensor = KL.Lambda(lambda x: x[..., 1:])(last_tensor)
-        last_tensor = KL.Lambda(lambda x: tf.cast(tf.concat(x, axis=-1), 'float32'))([input_image, last_tensor])
+        last_tensor = KL.Lambda(lambda x: tf.cast(
+            tf.concat(x, axis=-1), 'float32'))([input_image, last_tensor])
         net = Model(inputs=net.inputs, outputs=last_tensor)
 
         # build 2nd network
@@ -583,7 +654,8 @@ def build_model(path_model_segmentation,
         if sigma_smoothing > 0:
             last_tensor = net.output
             last_tensor._keras_shape = tuple(last_tensor.get_shape().as_list())
-            last_tensor = layers.GaussianBlur(sigma=sigma_smoothing)(last_tensor)
+            last_tensor = layers.GaussianBlur(
+                sigma=sigma_smoothing)(last_tensor)
             net = Model(inputs=net.inputs, outputs=last_tensor)
 
         if flip_indices is not None:
@@ -595,13 +667,17 @@ def build_model(path_model_segmentation,
 
             # flip back and re-order channels
             last_tensor = layers.RandomFlip(axis=0, prob=1)(last_tensor)
-            last_tensor = KL.Lambda(lambda x: tf.split(x, [1] * n_labels_seg, axis=-1), name='split')(last_tensor)
-            reordered_channels = [last_tensor[flip_indices[i]] for i in range(n_labels_seg)]
-            last_tensor = KL.Lambda(lambda x: tf.concat(x, -1), name='concat')(reordered_channels)
+            last_tensor = KL.Lambda(lambda x: tf.split(
+                x, [1] * n_labels_seg, axis=-1), name='split')(last_tensor)
+            reordered_channels = [last_tensor[flip_indices[i]]
+                                  for i in range(n_labels_seg)]
+            last_tensor = KL.Lambda(lambda x: tf.concat(
+                x, -1), name='concat')(reordered_channels)
 
             # average two segmentations and build model
             name_segm_prediction_layer = 'average_lr'
-            last_tensor = KL.Lambda(lambda x: 0.5 * (x[0] + x[1]), name=name_segm_prediction_layer)([seg, last_tensor])
+            last_tensor = KL.Lambda(
+                lambda x: 0.5 * (x[0] + x[1]), name=name_segm_prediction_layer)([seg, last_tensor])
             net = Model(inputs=net.inputs, outputs=last_tensor)
 
     # add aparc segmenter if needed
@@ -610,12 +686,18 @@ def build_model(path_model_segmentation,
 
         # build input for S3: only takes one map for cortical segmentation (no image), 1 = cortex, 0 = other
         last_tensor = net.output
-        last_tensor = KL.Lambda(lambda x: tf.cast(tf.argmax(x, axis=-1), 'int32'))(last_tensor)
-        last_tensor = layers.ConvertLabels(np.arange(n_labels_seg), labels_segmentation)(last_tensor)
-        parcellation_masking_values = np.array([1 if ((ll == 3) | (ll == 42)) else 0 for ll in labels_segmentation])
-        last_tensor = layers.ConvertLabels(labels_segmentation, parcellation_masking_values)(last_tensor)
-        last_tensor = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, 'int32'), depth=2, axis=-1))(last_tensor)
-        last_tensor = KL.Lambda(lambda x: tf.cast(tf.concat(x, axis=-1), 'float32'))([input_image, last_tensor])
+        last_tensor = KL.Lambda(lambda x: tf.cast(
+            tf.argmax(x, axis=-1), 'int32'))(last_tensor)
+        last_tensor = layers.ConvertLabels(
+            np.arange(n_labels_seg), labels_segmentation)(last_tensor)
+        parcellation_masking_values = np.array(
+            [1 if ((ll == 3) | (ll == 42)) else 0 for ll in labels_segmentation])
+        last_tensor = layers.ConvertLabels(
+            labels_segmentation, parcellation_masking_values)(last_tensor)
+        last_tensor = KL.Lambda(lambda x: tf.one_hot(
+            tf.cast(x, 'int32'), depth=2, axis=-1))(last_tensor)
+        last_tensor = KL.Lambda(lambda x: tf.cast(
+            tf.concat(x, axis=-1), 'float32'))([input_image, last_tensor])
         net = Model(inputs=net.inputs, outputs=last_tensor)
 
         # build UNet
@@ -636,7 +718,8 @@ def build_model(path_model_segmentation,
         last_tensor = net.output
         last_tensor._keras_shape = tuple(last_tensor.get_shape().as_list())
         last_tensor = layers.GaussianBlur(sigma=0.5)(last_tensor)
-        net = Model(inputs=net.inputs, outputs=[net.get_layer(name_segm_prediction_layer).output, last_tensor])
+        net = Model(inputs=net.inputs, outputs=[net.get_layer(
+            name_segm_prediction_layer).output, last_tensor])
 
     # add CNN regressor for automated QC if needed
     if do_qc:
@@ -645,14 +728,21 @@ def build_model(path_model_segmentation,
         # transition between the two networks: one_hot -> argmax -> qc_labels -> one_hot
         shape_prediction = KL.Input([3], dtype='int32')
         if do_parcellation:
-            last_tensor = KL.Lambda(lambda x: tf.cast(tf.argmax(x[0], axis=-1), 'int32'))(net.outputs)
+            last_tensor = KL.Lambda(lambda x: tf.cast(
+                tf.argmax(x[0], axis=-1), 'int32'))(net.outputs)
         else:
-            last_tensor = KL.Lambda(lambda x: tf.cast(tf.argmax(x, axis=-1), 'int32'))(net.output)
-        last_tensor = MakeShape(input_shape_qc)([last_tensor, shape_prediction])
-        last_tensor = layers.ConvertLabels(np.arange(n_labels_seg), labels_segmentation)(last_tensor)
-        last_tensor = layers.ConvertLabels(labels_segmentation, labels_qc)(last_tensor)
-        last_tensor = KL.Lambda(lambda x: tf.one_hot(tf.cast(x, 'int32'), depth=n_labels_qc, axis=-1))(last_tensor)
-        net = Model(inputs=[*net.inputs, shape_prediction], outputs=last_tensor)
+            last_tensor = KL.Lambda(lambda x: tf.cast(
+                tf.argmax(x, axis=-1), 'int32'))(net.output)
+        last_tensor = MakeShape(input_shape_qc)(
+            [last_tensor, shape_prediction])
+        last_tensor = layers.ConvertLabels(
+            np.arange(n_labels_seg), labels_segmentation)(last_tensor)
+        last_tensor = layers.ConvertLabels(
+            labels_segmentation, labels_qc)(last_tensor)
+        last_tensor = KL.Lambda(lambda x: tf.one_hot(
+            tf.cast(x, 'int32'), depth=n_labels_qc, axis=-1))(last_tensor)
+        net = Model(inputs=[*net.inputs, shape_prediction],
+                    outputs=last_tensor)
 
         # build QC regressor network
         net = nrn_models.conv_enc(input_model=net,
@@ -667,11 +757,16 @@ def build_model(path_model_segmentation,
                                   use_residuals=True,
                                   name='qc')
         last_tensor = net.outputs[0]
-        conv_kwargs = {'padding': 'same', 'activation': 'relu', 'data_format': 'channels_last'}
-        last_tensor = KL.MaxPool3D(pool_size=(2, 2, 2), name='qc_maxpool_3', padding='same')(last_tensor)
-        last_tensor = KL.Conv3D(n_labels_qc, kernel_size=5, **conv_kwargs, name='qc_final_conv_0')(last_tensor)
-        last_tensor = KL.Conv3D(n_labels_qc, kernel_size=5, **conv_kwargs, name='qc_final_conv_1')(last_tensor)
-        last_tensor = KL.Lambda(lambda x: tf.reduce_mean(x, axis=[1, 2, 3]), name='qc_final_pred')(last_tensor)
+        conv_kwargs = {'padding': 'same', 'activation': 'relu',
+                       'data_format': 'channels_last'}
+        last_tensor = KL.MaxPool3D(pool_size=(
+            2, 2, 2), name='qc_maxpool_3', padding='same')(last_tensor)
+        last_tensor = KL.Conv3D(
+            n_labels_qc, kernel_size=5, **conv_kwargs, name='qc_final_conv_0')(last_tensor)
+        last_tensor = KL.Conv3D(
+            n_labels_qc, kernel_size=5, **conv_kwargs, name='qc_final_conv_1')(last_tensor)
+        last_tensor = KL.Lambda(lambda x: tf.reduce_mean(
+            x, axis=[1, 2, 3]), name='qc_final_pred')(last_tensor)
 
         # build model
         if do_parcellation:
@@ -679,7 +774,8 @@ def build_model(path_model_segmentation,
                        net.get_layer('unet_parc_prediction').output,
                        last_tensor]
         else:
-            outputs = [net.get_layer(name_segm_prediction_layer).output, last_tensor]
+            outputs = [net.get_layer(
+                name_segm_prediction_layer).output, last_tensor]
         net = Model(inputs=net.inputs, outputs=outputs)
         net.load_weights(path_model_qc, by_name=True)
 
@@ -692,43 +788,54 @@ def postprocess(post_patch_seg, post_patch_parc, shape, pad_idx, crop_idx,
     # get posteriors
     post_patch_seg = np.squeeze(post_patch_seg)
     if fast | (topology_classes is None):
-        post_patch_seg = edit_volumes.crop_volume_with_idx(post_patch_seg, pad_idx, n_dims=3, return_copy=False)
+        post_patch_seg = edit_volumes.crop_volume_with_idx(
+            post_patch_seg, pad_idx, n_dims=3, return_copy=False)
 
     # keep biggest connected component
     tmp_post_patch_seg = post_patch_seg[..., 1:]
     post_patch_seg_mask = np.sum(tmp_post_patch_seg, axis=-1) > 0.25
-    post_patch_seg_mask = edit_volumes.get_largest_connected_component(post_patch_seg_mask)
-    post_patch_seg_mask = np.stack([post_patch_seg_mask]*tmp_post_patch_seg.shape[-1], axis=-1)
-    tmp_post_patch_seg = edit_volumes.mask_volume(tmp_post_patch_seg, mask=post_patch_seg_mask, return_copy=False)
+    post_patch_seg_mask = edit_volumes.get_largest_connected_component(
+        post_patch_seg_mask)
+    post_patch_seg_mask = np.stack(
+        [post_patch_seg_mask]*tmp_post_patch_seg.shape[-1], axis=-1)
+    tmp_post_patch_seg = edit_volumes.mask_volume(
+        tmp_post_patch_seg, mask=post_patch_seg_mask, return_copy=False)
     post_patch_seg[..., 1:] = tmp_post_patch_seg
 
     # reset posteriors to zero outside the largest connected component of each topological class
     if (not fast) & (topology_classes is not None):
         post_patch_seg_mask = post_patch_seg > 0.25
         for topology_class in np.unique(topology_classes)[1:]:
-            tmp_topology_indices = np.where(topology_classes == topology_class)[0]
-            tmp_mask = np.any(post_patch_seg_mask[..., tmp_topology_indices], axis=-1)
+            tmp_topology_indices = np.where(
+                topology_classes == topology_class)[0]
+            tmp_mask = np.any(
+                post_patch_seg_mask[..., tmp_topology_indices], axis=-1)
             tmp_mask = edit_volumes.get_largest_connected_component(tmp_mask)
             for idx in tmp_topology_indices:
                 post_patch_seg[..., idx] *= tmp_mask
-        post_patch_seg = edit_volumes.crop_volume_with_idx(post_patch_seg, pad_idx, n_dims=3, return_copy=False)
+        post_patch_seg = edit_volumes.crop_volume_with_idx(
+            post_patch_seg, pad_idx, n_dims=3, return_copy=False)
     else:
         post_patch_seg_mask = post_patch_seg > 0.2
         post_patch_seg[..., 1:] *= post_patch_seg_mask[..., 1:]
 
     # get hard segmentation
     post_patch_seg /= np.sum(post_patch_seg, axis=-1)[..., np.newaxis]
-    seg_patch = labels_segmentation[post_patch_seg.argmax(-1).astype('int32')].astype('int32')
+    seg_patch = labels_segmentation[post_patch_seg.argmax(
+        -1).astype('int32')].astype('int32')
 
     # postprocess parcellation
     if post_patch_parc is not None:
         post_patch_parc = np.squeeze(post_patch_parc)
-        post_patch_parc = edit_volumes.crop_volume_with_idx(post_patch_parc, pad_idx, n_dims=3, return_copy=False)
+        post_patch_parc = edit_volumes.crop_volume_with_idx(
+            post_patch_parc, pad_idx, n_dims=3, return_copy=False)
         mask = (seg_patch == 3) | (seg_patch == 42)
         post_patch_parc[..., 0] = np.ones_like(post_patch_parc[..., 0])
-        post_patch_parc[..., 0] = edit_volumes.mask_volume(post_patch_parc[..., 0], mask=mask < 0.1, return_copy=False)
+        post_patch_parc[..., 0] = edit_volumes.mask_volume(
+            post_patch_parc[..., 0], mask=mask < 0.1, return_copy=False)
         post_patch_parc /= np.sum(post_patch_parc, axis=-1)[..., np.newaxis]
-        parc_patch = labels_parcellation[post_patch_parc.argmax(-1).astype('int32')].astype('int32')
+        parc_patch = labels_parcellation[post_patch_parc.argmax(
+            -1).astype('int32')].astype('int32')
         seg_patch[mask] = parc_patch[mask]
 
     # paste patches back to matrix of original image size
@@ -737,29 +844,40 @@ def postprocess(post_patch_seg, post_patch_parc, shape, pad_idx, crop_idx,
         seg = np.zeros(shape=shape, dtype='int32')
         posteriors = np.zeros(shape=[*shape, labels_segmentation.shape[0]])
         posteriors[..., 0] = np.ones(shape)  # place background around patch
-        seg[crop_idx[0]:crop_idx[3], crop_idx[1]:crop_idx[4], crop_idx[2]:crop_idx[5]] = seg_patch
-        posteriors[crop_idx[0]:crop_idx[3], crop_idx[1]:crop_idx[4], crop_idx[2]:crop_idx[5], :] = post_patch_seg
+        seg[crop_idx[0]:crop_idx[3], crop_idx[1]:crop_idx[4],
+            crop_idx[2]:crop_idx[5]] = seg_patch
+        posteriors[crop_idx[0]:crop_idx[3], crop_idx[1]:crop_idx[4],
+                   crop_idx[2]:crop_idx[5], :] = post_patch_seg
     else:
         seg = seg_patch
         posteriors = post_patch_seg
 
     # align prediction back to first orientation
-    seg = edit_volumes.align_volume_to_ref(seg, aff=np.eye(4), aff_ref=aff, n_dims=3, return_copy=False)
-    posteriors = edit_volumes.align_volume_to_ref(posteriors, np.eye(4), aff_ref=aff, n_dims=3, return_copy=False)
+    seg = edit_volumes.align_volume_to_ref(
+        seg, aff=np.eye(4), aff_ref=aff, n_dims=3, return_copy=False)
+    posteriors = edit_volumes.align_volume_to_ref(
+        posteriors, np.eye(4), aff_ref=aff, n_dims=3, return_copy=False)
 
     # compute volumes
-    volumes = np.sum(posteriors[..., 1:], axis=tuple(range(0, len(posteriors.shape) - 1)))
-    total_volume_cortex_left = np.sum(volumes[np.where(labels_segmentation == 3)[0] - 1])
-    total_volume_cortex_right = np.sum(volumes[np.where(labels_segmentation == 42)[0] - 1])
+    volumes = np.sum(posteriors[..., 1:], axis=tuple(
+        range(0, len(posteriors.shape) - 1)))
+    total_volume_cortex_left = np.sum(
+        volumes[np.where(labels_segmentation == 3)[0] - 1])
+    total_volume_cortex_right = np.sum(
+        volumes[np.where(labels_segmentation == 42)[0] - 1])
     if not v1:
         volumes = np.concatenate([np.array([np.sum(volumes)]), volumes])
     if post_patch_parc is not None:
-        volumes_parc = np.sum(post_patch_parc[..., 1:], axis=tuple(range(0, len(posteriors.shape) - 1)))
+        volumes_parc = np.sum(post_patch_parc[..., 1:], axis=tuple(
+            range(0, len(posteriors.shape) - 1)))
         volumes_parc_left = volumes_parc[:int(len(volumes_parc) / 2)]
         volumes_parc_right = volumes_parc[int(len(volumes_parc) / 2):]
-        volumes_parc_left = volumes_parc_left / np.sum(volumes_parc_left) * total_volume_cortex_left
-        volumes_parc_right = volumes_parc_right / np.sum(volumes_parc_right) * total_volume_cortex_right
-        volumes = np.concatenate([volumes, volumes_parc_left, volumes_parc_right])
+        volumes_parc_left = volumes_parc_left / \
+            np.sum(volumes_parc_left) * total_volume_cortex_left
+        volumes_parc_right = volumes_parc_right / \
+            np.sum(volumes_parc_right) * total_volume_cortex_right
+        volumes = np.concatenate(
+            [volumes, volumes_parc_left, volumes_parc_right])
     volumes = np.around(volumes * np.prod(im_res), 3)
 
     return seg, posteriors, volumes
@@ -781,7 +899,8 @@ class MakeShape(KL.Layer):
 
     def build(self, input_shape):
         self.n_dims = input_shape[1][1]
-        self.cropping_shape = np.array(utils.reformat_to_list(self.target_shape, length=self.n_dims))
+        self.cropping_shape = np.array(utils.reformat_to_list(
+            self.target_shape, length=self.n_dims))
         self.built = True
         super(MakeShape, self).build(input_shape)
 
@@ -795,28 +914,35 @@ class MakeShape(KL.Layer):
 
         # find cropping indices
         mask = tf.logical_and(tf.not_equal(x, 0), tf.not_equal(x, 24))
-        indices = tf.cast(tf.where(mask), 'int32')
+        indices = tf.cast(tf.compat.v1.where(mask), 'int32')
 
-        min_idx = K.switch(tf.equal(tf.shape(indices)[0], 0),
-                           tf.zeros(self.n_dims, dtype='int32'),
-                           tf.maximum(tf.reduce_min(indices, axis=0), 0))
-        max_idx = K.switch(tf.equal(tf.shape(indices)[0], 0),
-                           tf.minimum(shape, self.cropping_shape),
-                           tf.minimum(tf.reduce_max(indices, axis=0) + 1, shape))
+        min_idx = K.legacy.backend.switch(tf.equal(tf.shape(indices)[0], 0),
+                                          tf.zeros(self.n_dims, dtype='int32'),
+                                          tf.maximum(tf.reduce_min(indices, axis=0), 0))
+        max_idx = K.legacy.backend.switch(tf.equal(tf.shape(indices)[0], 0),
+                                          tf.minimum(
+                                              shape, self.cropping_shape),
+                                          tf.minimum(tf.reduce_max(indices, axis=0) + 1, shape))
 
         # expand/retract (depending on the desired shape) the cropping region around the centre
         intermediate_vol_shape = max_idx - min_idx
-        min_idx = min_idx - tf.cast(tf.math.ceil((self.cropping_shape - intermediate_vol_shape) / 2), 'int32')
-        max_idx = max_idx + tf.cast(tf.math.floor((self.cropping_shape - intermediate_vol_shape) / 2), 'int32')
+        min_idx = min_idx - \
+            tf.cast(tf.math.ceil((self.cropping_shape -
+                    intermediate_vol_shape) / 2), 'int32')
+        max_idx = max_idx + \
+            tf.cast(tf.math.floor((self.cropping_shape -
+                    intermediate_vol_shape) / 2), 'int32')
         tmp_min_idx = tf.maximum(min_idx, 0)
         tmp_max_idx = tf.minimum(max_idx, shape)
-        x = tf.slice(x, begin=tmp_min_idx, size=tf.minimum(tmp_max_idx - tmp_min_idx, shape))
+        x = tf.slice(x, begin=tmp_min_idx, size=tf.minimum(
+            tmp_max_idx - tmp_min_idx, shape))
 
         # pad if necessary
         min_padding = tf.abs(tf.minimum(min_idx, 0))
         max_padding = tf.maximum(max_idx - shape, 0)
-        x = K.switch(tf.reduce_any(tf.logical_or(tf.greater(min_padding, 0), tf.greater(max_padding, 0))),
-                     tf.pad(x, tf.stack([min_padding, max_padding], axis=1)),
-                     x)
+        x = K.legacy.backend.switch(tf.reduce_any(tf.logical_or(tf.greater(min_padding, 0), tf.greater(max_padding, 0))),
+                                    tf.pad(x, tf.stack(
+                                        [min_padding, max_padding], axis=1)),
+                                    x)
 
         return x
