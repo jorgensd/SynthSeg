@@ -20,6 +20,7 @@ import itertools
 import numpy as np
 import tensorflow as tf
 import keras.backend as K
+import keras.ops as ops
 
 
 def interpn(vol, loc, interp_method='linear'):
@@ -53,7 +54,7 @@ def interpn(vol, loc, interp_method='linear'):
                         % (nb_dims, len(vol.shape)))
 
     if len(vol.shape) == nb_dims:
-        vol = K.expand_dims(vol, -1)
+        vol = ops.expand_dims(vol, -1)
 
     # flatten and float location Tensors
     loc = tf.cast(loc, 'float32')
@@ -69,21 +70,26 @@ def interpn(vol, loc, interp_method='linear'):
 
         # clip values
         max_loc = [d - 1 for d in vol.get_shape().as_list()]
-        clipped_loc = [tf.clip_by_value(loc[..., d], 0, max_loc[d]) for d in range(nb_dims)]
-        loc0lst = [tf.clip_by_value(loc0[..., d], 0, max_loc[d]) for d in range(nb_dims)]
+        clipped_loc = [tf.clip_by_value(
+            loc[..., d], 0, max_loc[d]) for d in range(nb_dims)]
+        loc0lst = [tf.clip_by_value(loc0[..., d], 0, max_loc[d])
+                   for d in range(nb_dims)]
 
         # get other end of point cube
-        loc1 = [tf.clip_by_value(loc0lst[d] + 1, 0, max_loc[d]) for d in range(nb_dims)]
-        locs = [[tf.cast(f, 'int32') for f in loc0lst], [tf.cast(f, 'int32') for f in loc1]]
+        loc1 = [tf.clip_by_value(loc0lst[d] + 1, 0, max_loc[d])
+                for d in range(nb_dims)]
+        locs = [[tf.cast(f, 'int32') for f in loc0lst], [
+            tf.cast(f, 'int32') for f in loc1]]
 
         # compute the difference between the upper value and the original value
         # differences are basically 1 - (pt - floor(pt))
         #   because: floor(pt) + 1 - pt = 1 + (floor(pt) - pt) = 1 - (pt - floor(pt))
         diff_loc1 = [loc1[d] - clipped_loc[d] for d in range(nb_dims)]
         diff_loc0 = [1 - d for d in diff_loc1]
-        weights_loc = [diff_loc1, diff_loc0]  # note reverse ordering since weights are inverse of diff.
+        # note reverse ordering since weights are inverse of diff.
+        weights_loc = [diff_loc1, diff_loc0]
 
-        # go through all the cube corners, indexed by a ND binary vector 
+        # go through all the cube corners, indexed by a ND binary vector
         # e.g. [0, 0] means this "first" corner in a 2-D "cube"
         cube_pts = list(itertools.product([0, 1], repeat=nb_dims))
         interp_vol = 0
@@ -104,7 +110,7 @@ def interpn(vol, loc, interp_method='linear'):
             # if c[d] is 1 --> want weight = pt - floor[pt] = diff_loc0
             wts_lst = [weights_loc[c[d]][d] for d in range(nb_dims)]
             wt = prod_n(wts_lst)
-            wt = K.expand_dims(wt, -1)
+            wt = ops.expand_dims(wt, -1)
 
             # compute final weighted value for each cube corner
             interp_vol += wt * vol_val
@@ -115,7 +121,8 @@ def interpn(vol, loc, interp_method='linear'):
 
         # clip values
         max_loc = [tf.cast(d - 1, 'int32') for d in vol.shape]
-        roundloc = [tf.clip_by_value(roundloc[..., d], 0, max_loc[d]) for d in range(nb_dims)]
+        roundloc = [tf.clip_by_value(
+            roundloc[..., d], 0, max_loc[d]) for d in range(nb_dims)]
 
         # get values
         idx = sub2ind(vol.shape[:-1], roundloc)
@@ -138,7 +145,8 @@ def resize(vol, zoom_factor, new_shape, interp_method='linear'):
         ndims = len(zoom_factor)
         vol_shape = vol.shape[:ndims]
         assert len(vol_shape) in (ndims, ndims + 1), \
-            "zoom_factor length %d does not match ndims %d" % (len(vol_shape), ndims)
+            "zoom_factor length %d does not match ndims %d" % (
+                len(vol_shape), ndims)
     else:
         vol_shape = vol.shape[:-1]
         ndims = len(vol_shape)
@@ -254,7 +262,8 @@ def combine_non_linear_and_aff_to_shift(transform_list, volshape, shift_center=T
             raise ValueError('transform is supposed a vector of len ndims * (ndims + 1).'
                              'Got len %d' % len(transform_list[1]))
 
-        transform_list[1] = tf.reshape(transform_list[1], [nb_dims, nb_dims + 1])
+        transform_list[1] = tf.reshape(
+            transform_list[1], [nb_dims, nb_dims + 1])
 
     if not (transform_list[1].shape[0] in [nb_dims, nb_dims + 1] and transform_list[1].shape[1] == (nb_dims + 1)):
         raise Exception('Affine matrix shape should match'
@@ -300,7 +309,7 @@ def transform(vol, loc_shift, interp_method='linear', indexing='ij'):
         interp_method (default:'linear'): 'linear', 'nearest'
         indexing (default: 'ij'): 'ij' (matrix) or 'xy' (cartesian).
             In general, prefer to leave this 'ij'
-    
+
     Return:
         new interpolated volumes in the same size as loc_shift[0]
     """
@@ -314,7 +323,8 @@ def transform(vol, loc_shift, interp_method='linear', indexing='ij'):
 
     # location should be meshed and delta
     mesh = volshape_to_meshgrid(volshape, indexing=indexing)  # volume mesh
-    loc = [tf.cast(mesh[d], 'float32') + loc_shift[..., d] for d in range(nb_dims)]
+    loc = [tf.cast(mesh[d], 'float32') + loc_shift[..., d]
+           for d in range(nb_dims)]
 
     # test single
     return interpn(vol, loc, interp_method=interp_method)
@@ -323,7 +333,7 @@ def transform(vol, loc_shift, interp_method='linear', indexing='ij'):
 def integrate_vec(vec, time_dep=False, method='ss', **kwargs):
     """
     Integrate (stationary of time-dependent) vector field (N-D Tensor) in tensorflow
-    
+
     Aside from directly using tensorflow's numerical integration odeint(), also implements 
     "scaling and squaring", and quadrature. Note that the diff. equation given to odeint
     is the one used in quadrature.   
@@ -336,7 +346,7 @@ def integrate_vec(vec, time_dep=False, method='ss', **kwargs):
             [vol_size, vol_ndim, nb_time_steps] (if time dependent)
         time_dep: bool whether vector is time dependent
         method: 'scaling_and_squaring' or 'ss' or 'quadrature'
-        
+
         if using 'scaling_and_squaring': currently only supports integrating to time point 1.
             nb_steps int number of steps. Note that this means the vec field gets broken own to 2**nb_steps.
             so nb_steps of 0 means integral = vec.
@@ -346,19 +356,22 @@ def integrate_vec(vec, time_dep=False, method='ss', **kwargs):
     """
 
     if method not in ['ss', 'scaling_and_squaring', 'ode', 'quadrature']:
-        raise ValueError("method has to be 'scaling_and_squaring' or 'ode'. found: %s" % method)
+        raise ValueError(
+            "method has to be 'scaling_and_squaring' or 'ode'. found: %s" % method)
 
     if method in ['ss', 'scaling_and_squaring']:
         nb_steps = kwargs['nb_steps']
         assert nb_steps >= 0, 'nb_steps should be >= 0, found: %d' % nb_steps
 
         if time_dep:
-            svec = K.permute_dimensions(vec, [-1, *range(0, vec.shape[-1] - 1)])
+            svec = K.permute_dimensions(
+                vec, [-1, *range(0, vec.shape[-1] - 1)])
             assert 2 ** nb_steps == svec.shape[0], "2**nb_steps and vector shape don't match"
 
             svec = svec / (2 ** nb_steps)
             for _ in range(nb_steps):
-                svec = svec[0::2] + tf.map_fn(transform, svec[1::2, :], svec[0::2, :])
+                svec = svec[0::2] + \
+                    tf.map_fn(transform, svec[1::2, :], svec[0::2, :])
 
             disp = svec[0, :]
 
@@ -441,18 +454,18 @@ def ndgrid(*args, **kwargs):
 
     Returns:
         A list of Tensors
-    
+
     """
     return meshgrid(*args, indexing='ij', **kwargs)
 
 
 def meshgrid(*args, **kwargs):
     """
-    
+
     meshgrid code that builds on (copies) tensorflow's meshgrid but dramatically
     improves runtime by changing the last step to tiling instead of multiplication.
     https://github.com/tensorflow/tensorflow/blob/c19e29306ce1777456b2dbb3a14f511edf7883a8/tensorflow/python/ops/array_ops.py#L1921
-    
+
     Broadcasts parameters for evaluation on an N-D grid.
     Given N one-dimensional coordinate arrays `*args`, returns a list `outputs`
     of N-D coordinate arrays for evaluating expressions on an N-D grid.
@@ -537,7 +550,8 @@ def prod_n(lst):
 def sub2ind(siz, subs):
     """assumes column-order major"""
     # subs is a list
-    assert len(siz) == len(subs), 'found inconsistent siz and subs: %d %d' % (len(siz), len(subs))
+    assert len(siz) == len(subs), 'found inconsistent siz and subs: %d %d' % (
+        len(siz), len(subs))
 
     k = np.cumprod(siz[::-1])
 

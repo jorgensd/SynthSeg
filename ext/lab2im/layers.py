@@ -40,6 +40,7 @@ import keras
 import numpy as np
 import tensorflow as tf
 import keras.backend as K
+import keras.ops as ops
 from keras.layers import Layer
 
 # project imports
@@ -115,7 +116,7 @@ class RandomSpatialDeformation(Layer):
         # boolean attributes
         self.apply_affine_trans = (self.scaling_bounds is not False) | (self.rotation_bounds is not False) | \
                                   (self.shearing_bounds is not False) | (self.translation_bounds is not False) | \
-                                  self.enable_90_rotations
+            self.enable_90_rotations
         self.apply_elastic_trans = self.nonlin_std > 0
         self.prob_deform = prob_deform
 
@@ -153,7 +154,8 @@ class RandomSpatialDeformation(Layer):
         else:
             self.small_shape = None
 
-        self.inter_method = utils.reformat_to_list(self.inter_method, length=self.n_inputs, dtype='str')
+        self.inter_method = utils.reformat_to_list(
+            self.inter_method, length=self.n_inputs, dtype='str')
 
         self.built = True
         super(RandomSpatialDeformation, self).build(input_shape)
@@ -185,15 +187,19 @@ class RandomSpatialDeformation(Layer):
         if self.apply_elastic_trans:
 
             # sample small field from normal distribution of specified std dev
-            trans_shape = tf.concat([batchsize, tf.convert_to_tensor(self.small_shape, dtype='int32')], axis=0)
+            trans_shape = tf.concat([batchsize, tf.convert_to_tensor(
+                self.small_shape, dtype='int32')], axis=0)
             trans_std = tf.random.uniform((1, 1), maxval=self.nonlin_std)
             elastic_trans = tf.random.normal(trans_shape, stddev=trans_std)
 
             # reshape this field to half size (for smoother SVF), integrate it, and reshape to full image size
-            resize_shape = [max(int(self.inshape[i] / 2), self.small_shape[i]) for i in range(self.n_dims)]
-            elastic_trans = nrn_layers.Resize(size=resize_shape, interp_method='linear')(elastic_trans)
+            resize_shape = [max(int(self.inshape[i] / 2), self.small_shape[i])
+                            for i in range(self.n_dims)]
+            elastic_trans = nrn_layers.Resize(
+                size=resize_shape, interp_method='linear')(elastic_trans)
             elastic_trans = nrn_layers.VecInt()(elastic_trans)
-            elastic_trans = nrn_layers.Resize(size=self.inshape[:self.n_dims], interp_method='linear')(elastic_trans)
+            elastic_trans = nrn_layers.Resize(
+                size=self.inshape[:self.n_dims], interp_method='linear')(elastic_trans)
             list_trans.append(elastic_trans)
 
         # apply deformations and return tensors with correct dtype
@@ -202,8 +208,9 @@ class RandomSpatialDeformation(Layer):
                 inputs = [nrn_layers.SpatialTransformer(m)([v] + list_trans) for (m, v) in
                           zip(self.inter_method, inputs)]
             else:
-                rand_trans = tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_deform))
-                inputs = [K.switch(rand_trans, nrn_layers.SpatialTransformer(m)([v] + list_trans), v)
+                rand_trans = tf.squeeze(
+                    ops.less(tf.random.uniform([1], 0, 1), self.prob_deform))
+                inputs = [ops.switch(rand_trans, nrn_layers.SpatialTransformer(m)([v] + list_trans), v)
                           for (m, v) in zip(self.inter_method, inputs)]
         if self.n_inputs < 2:
             return tf.cast(inputs[0], types[0])
@@ -244,7 +251,8 @@ class RandomCrop(Layer):
             inputshape = [input_shape]
         else:
             inputshape = input_shape
-        self.crop_max_val = np.array(np.array(inputshape[0][1:self.n_dims + 1])) - np.array(self.crop_shape)
+        self.crop_max_val = np.array(
+            np.array(inputshape[0][1:self.n_dims + 1])) - np.array(self.crop_shape)
         self.list_n_channels = [i[-1] for i in inputshape]
         self.built = True
         super(RandomCrop, self).build(input_shape)
@@ -258,19 +266,22 @@ class RandomCrop(Layer):
         # otherwise we concatenate all inputs before cropping, so that they are all cropped at the same location
         else:
             types = [v.dtype for v in inputs]
-            inputs = tf.concat([tf.cast(v, 'float32') for v in inputs], axis=-1)
+            inputs = tf.concat([tf.cast(v, 'float32')
+                               for v in inputs], axis=-1)
             inputs = tf.map_fn(self._single_slice, inputs, dtype=tf.float32)
             inputs = tf.split(inputs, self.list_n_channels, axis=-1)
             return [tf.cast(v, t) for (t, v) in zip(types, inputs)]
 
     def _single_slice(self, vol):
-        crop_idx = tf.cast(tf.random.uniform([self.n_dims], 0, np.array(self.crop_max_val), 'float32'), dtype='int32')
+        crop_idx = tf.cast(tf.random.uniform([self.n_dims], 0, np.array(
+            self.crop_max_val), 'float32'), dtype='int32')
         crop_idx = tf.concat([crop_idx, tf.zeros([1], dtype='int32')], axis=0)
         crop_size = tf.convert_to_tensor(self.crop_shape + [-1], dtype='int32')
         return tf.slice(vol, begin=crop_idx, size=crop_size)
 
     def compute_output_shape(self, input_shape):
-        output_shape = [tuple([None] + self.crop_shape + [v]) for v in self.list_n_channels]
+        output_shape = [tuple([None] + self.crop_shape + [v])
+                        for v in self.list_n_channels]
         return output_shape if self.several_inputs else output_shape[0]
 
 
@@ -368,8 +379,10 @@ class RandomFlip(Layer):
             inputshape = input_shape
         self.n_dims = len(inputshape[0][1:-1])
         self.list_n_channels = [i[-1] for i in inputshape]
-        self.swap_labels = utils.reformat_to_list(self.swap_labels, length=len(inputshape))
-        self.flip_axes = np.arange(self.n_dims).tolist() if self.axis is None else self.axis
+        self.swap_labels = utils.reformat_to_list(
+            self.swap_labels, length=len(inputshape))
+        self.flip_axes = np.arange(self.n_dims).tolist(
+        ) if self.axis is None else self.axis
 
         # create label list with swapped labels
         if any(self.swap_labels):
@@ -381,8 +394,10 @@ class RandomFlip(Layer):
             else:
                 rl_split = np.split(self.label_list, [self.n_neutral_labels,
                                                       self.n_neutral_labels + int((n_labels-self.n_neutral_labels)/2)])
-                label_list_swap = np.concatenate((rl_split[0], rl_split[2], rl_split[1]))
-                swap_lut = utils.get_mapping_lut(self.label_list, label_list_swap)
+                label_list_swap = np.concatenate(
+                    (rl_split[0], rl_split[2], rl_split[1]))
+                swap_lut = utils.get_mapping_lut(
+                    self.label_list, label_list_swap)
                 self.swap_lut = tf.convert_to_tensor(swap_lut, dtype='int32')
 
         self.built = True
@@ -396,21 +411,28 @@ class RandomFlip(Layer):
 
         # store whether to flip along each specified dimension
         batchsize = tf.split(tf.shape(inputs[0]), [1, self.n_dims + 1])[0]
-        size = tf.concat([batchsize, len(self.flip_axes) * tf.ones(1, dtype='int32')], axis=0)
-        rand_flip = K.less(tf.random.uniform(size, 0, 1), self.prob)
+        size = tf.concat([batchsize, len(self.flip_axes) *
+                         tf.ones(1, dtype='int32')], axis=0)
+        rand_flip = ops.less(
+            tf.random.uniform(size, 0, 1), self.prob)
 
         # swap right/left labels if we apply an odd number of flips
-        odd = tf.math.floormod(tf.reduce_sum(tf.cast(rand_flip, 'int32'), -1, keepdims=True), 2) != 0
+        odd = tf.math.floormod(tf.reduce_sum(
+            tf.cast(rand_flip, 'int32'), -1, keepdims=True), 2) != 0
         swapped_inputs = list()
         for i in range(len(inputs)):
             if self.swap_labels[i]:
-                swapped_inputs.append(tf.map_fn(self._single_swap, [inputs[i], odd], dtype=types[i]))
+                swapped_inputs.append(tf.map_fn(self._single_swap, [
+                                      inputs[i], odd], dtype=types[i]))
             else:
                 swapped_inputs.append(inputs[i])
 
         # flip inputs and convert them back to their original type
-        inputs = tf.concat([tf.cast(v, 'float32') for v in swapped_inputs], axis=-1)
-        inputs = tf.map_fn(self._single_flip, [inputs, rand_flip], dtype=tf.float32)
+        inputs = tf.concat([tf.cast(v, 'float32')
+                           for v in swapped_inputs], axis=-1)
+
+        inputs = tf.map_fn(self._single_flip, [
+                           inputs, rand_flip], dtype=tf.float32)
         inputs = tf.split(inputs, self.list_n_channels, axis=-1)
 
         if self.several_inputs:
@@ -419,12 +441,12 @@ class RandomFlip(Layer):
             return tf.cast(inputs[0], types[0])
 
     def _single_swap(self, inputs):
-        return K.switch(inputs[1], tf.gather(self.swap_lut, inputs[0]), inputs[0])
+        return ops.switch(inputs[1], [lambda: tf.gather(self.swap_lut, inputs[0]), lambda:inputs[0]])
 
     @staticmethod
     def _single_flip(inputs):
-        flip_axis = tf.where(inputs[1])
-        return K.switch(tf.equal(tf.size(flip_axis), 0), inputs[0], tf.reverse(inputs[0], axis=flip_axis[..., 0]))
+        flip_axis = tf.compat.v1.where(inputs[1])
+        return ops.switch(tf.equal(tf.size(flip_axis), 0), [lambda: inputs[0], lambda: tf.reverse(inputs[0], axis=flip_axis[..., 0])])
 
 
 class SampleConditionalGMM(Layer):
@@ -462,7 +484,8 @@ class SampleConditionalGMM(Layer):
     def build(self, input_shape):
 
         # check n_labels and n_channels
-        assert len(input_shape) == 3, 'should have three inputs: labels, means, std devs (in that order).'
+        assert len(
+            input_shape) == 3, 'should have three inputs: labels, means, std devs (in that order).'
         self.n_channels = input_shape[1][-1]
         self.n_labels = len(self.generation_labels)
         assert self.n_labels == input_shape[1][1], 'means should have the same number of values as generation_labels'
@@ -470,9 +493,11 @@ class SampleConditionalGMM(Layer):
 
         # scatter parameters (to build mean/std lut)
         self.max_label = np.max(self.generation_labels) + 1
-        indices = np.concatenate([self.generation_labels + self.max_label * i for i in range(self.n_channels)], axis=-1)
+        indices = np.concatenate(
+            [self.generation_labels + self.max_label * i for i in range(self.n_channels)], axis=-1)
         self.shape = tf.convert_to_tensor([np.max(indices) + 1], dtype='int32')
-        self.indices = tf.convert_to_tensor(utils.add_axis(indices, axis=[0, -1]), dtype='int32')
+        self.indices = tf.convert_to_tensor(
+            utils.add_axis(indices, axis=[0, -1]), dtype='int32')
 
         self.built = True
         super(SampleConditionalGMM, self).build(input_shape)
@@ -481,19 +506,28 @@ class SampleConditionalGMM(Layer):
 
         # reformat labels and scatter indices
         batch = tf.split(tf.shape(inputs[0]), [1, -1])[0]
-        tmp_indices = tf.tile(self.indices, tf.concat([batch, tf.convert_to_tensor([1, 1], dtype='int32')], axis=0))
-        labels = tf.concat([tf.cast(inputs[0], dtype='int32') + self.max_label * i for i in range(self.n_channels)], -1)
+        tmp_indices = tf.tile(self.indices, tf.concat(
+            [batch, tf.convert_to_tensor([1, 1], dtype='int32')], axis=0))
+        labels = tf.concat([tf.cast(inputs[0], dtype='int32') +
+                           self.max_label * i for i in range(self.n_channels)], -1)
 
         # build mean map
-        means = tf.concat([inputs[1][..., i] for i in range(self.n_channels)], 1)
-        tile_shape = tf.concat([batch, tf.convert_to_tensor([1, ], dtype='int32')], axis=0)
-        means = tf.tile(tf.expand_dims(tf.scatter_nd(tmp_indices, means, self.shape), 0), tile_shape)
-        means_map = tf.map_fn(lambda x: tf.gather(x[0], x[1]), [means, labels], dtype=tf.float32)
+        means = tf.concat([inputs[1][..., i]
+                          for i in range(self.n_channels)], 1)
+        tile_shape = tf.concat(
+            [batch, tf.convert_to_tensor([1, ], dtype='int32')], axis=0)
+        means = tf.tile(tf.expand_dims(tf.scatter_nd(
+            tmp_indices, means, self.shape), 0), tile_shape)
+        means_map = tf.map_fn(lambda x: tf.gather(x[0], x[1]), [
+                              means, labels], dtype=tf.float32)
 
         # same for stds
-        stds = tf.concat([inputs[2][..., i] for i in range(self.n_channels)], 1)
-        stds = tf.tile(tf.expand_dims(tf.scatter_nd(tmp_indices, stds, self.shape), 0), tile_shape)
-        stds_map = tf.map_fn(lambda x: tf.gather(x[0], x[1]), [stds, labels], dtype=tf.float32)
+        stds = tf.concat([inputs[2][..., i]
+                         for i in range(self.n_channels)], 1)
+        stds = tf.tile(tf.expand_dims(tf.scatter_nd(
+            tmp_indices, stds, self.shape), 0), tile_shape)
+        stds_map = tf.map_fn(lambda x: tf.gather(x[0], x[1]), [
+                             stds, labels], dtype=tf.float32)
 
         return stds_map * tf.random.normal(tf.shape(labels)) + means_map
 
@@ -585,7 +619,8 @@ class SampleResolution(Layer):
 
         # check prob iso
         if (self.max_res_iso is not None) & (self.max_res_aniso is not None) & (self.prob_iso == 0):
-            raise Exception('prob iso is 0 while sampling either isotropic and anisotropic resolutions is enabled')
+            raise Exception(
+                'prob iso is 0 while sampling either isotropic and anisotropic resolutions is enabled')
 
         if input_shape:
             self.add_batchsize = True
@@ -599,17 +634,23 @@ class SampleResolution(Layer):
 
         if not self.add_batchsize:
             shape = [self.n_dims]
-            dim = tf.random.uniform(shape=(1, 1), minval=0, maxval=self.n_dims, dtype='int32')
+            dim = tf.random.uniform(
+                shape=(1, 1), minval=0, maxval=self.n_dims, dtype='int32')
             mask = tf.tensor_scatter_nd_update(tf.zeros([self.n_dims], dtype='bool'), dim,
                                                tf.convert_to_tensor([True], dtype='bool'))
         else:
             batch = tf.split(tf.shape(inputs), [1, -1])[0]
-            tile_shape = tf.concat([batch, tf.convert_to_tensor([1], dtype='int32')], axis=0)
-            self.min_res_tens = tf.tile(tf.expand_dims(self.min_res_tens, 0), tile_shape)
+            tile_shape = tf.concat(
+                [batch, tf.convert_to_tensor([1], dtype='int32')], axis=0)
+            self.min_res_tens = tf.tile(
+                tf.expand_dims(self.min_res_tens, 0), tile_shape)
 
-            shape = tf.concat([batch, tf.convert_to_tensor([self.n_dims], dtype='int32')], axis=0)
-            indices = tf.stack([tf.range(0, batch[0]), tf.random.uniform(batch, 0, self.n_dims, dtype='int32')], 1)
-            mask = tf.tensor_scatter_nd_update(tf.zeros(shape, dtype='bool'), indices, tf.ones(batch, dtype='bool'))
+            shape = tf.concat([batch, tf.convert_to_tensor(
+                [self.n_dims], dtype='int32')], axis=0)
+            indices = tf.stack([tf.range(0, batch[0]), tf.random.uniform(
+                batch, 0, self.n_dims, dtype='int32')], 1)
+            mask = tf.tensor_scatter_nd_update(
+                tf.zeros(shape, dtype='bool'), indices, tf.ones(batch, dtype='bool'))
 
         # return min resolution as tensor if min=max
         if (self.max_res_iso is None) & (self.max_res_aniso is None):
@@ -617,28 +658,32 @@ class SampleResolution(Layer):
 
         # sample isotropic resolution only
         elif (self.max_res_iso is not None) & (self.max_res_aniso is None):
-            new_resolution_iso = tf.random.uniform(shape, minval=self.min_res, maxval=self.max_res_iso)
-            new_resolution = K.switch(tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_min)),
-                                      self.min_res_tens,
-                                      new_resolution_iso)
+            new_resolution_iso = tf.random.uniform(
+                shape, minval=self.min_res, maxval=self.max_res_iso)
+            new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_min)),
+                                        [lambda:self.min_res_tens,
+                                        lambda:new_resolution_iso])
 
         # sample anisotropic resolution only
         elif (self.max_res_iso is None) & (self.max_res_aniso is not None):
-            new_resolution_aniso = tf.random.uniform(shape, minval=self.min_res, maxval=self.max_res_aniso)
-            new_resolution = K.switch(tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_min)),
-                                      self.min_res_tens,
-                                      tf.where(mask, new_resolution_aniso, self.min_res_tens))
+            new_resolution_aniso = tf.random.uniform(
+                shape, minval=self.min_res, maxval=self.max_res_aniso)
+            new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_min)),
+                                        [lambda: self.min_res_tens,
+                                        lambda: tf.compat.v1.where(mask, new_resolution_aniso, self.min_res_tens)])
 
         # sample either anisotropic or isotropic resolution
         else:
-            new_resolution_iso = tf.random.uniform(shape, minval=self.min_res, maxval=self.max_res_iso)
-            new_resolution_aniso = tf.random.uniform(shape, minval=self.min_res, maxval=self.max_res_aniso)
-            new_resolution = K.switch(tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_iso)),
-                                      new_resolution_iso,
-                                      tf.where(mask, new_resolution_aniso, self.min_res_tens))
-            new_resolution = K.switch(tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_min)),
-                                      self.min_res_tens,
-                                      new_resolution)
+            new_resolution_iso = tf.random.uniform(
+                shape, minval=self.min_res, maxval=self.max_res_iso)
+            new_resolution_aniso = tf.random.uniform(
+                shape, minval=self.min_res, maxval=self.max_res_aniso)
+            new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_iso)),
+                                        [lambda: new_resolution_iso,
+                                        lambda: tf.compat.v1.where(mask, new_resolution_aniso, self.min_res_tens)])
+            new_resolution = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_min)),
+                                        [lambda: self.min_res_tens,
+                                        lambda: new_resolution])
 
         if self.return_thickness:
             return [new_resolution, tf.random.uniform(tf.shape(self.min_res_tens), self.min_res_tens, new_resolution)]
@@ -684,7 +729,8 @@ class GaussianBlur(Layer):
 
     def __init__(self, sigma, random_blur_range=None, use_mask=False, **kwargs):
         self.sigma = utils.reformat_to_list(sigma)
-        assert np.all(np.array(self.sigma) >= 0), 'sigma should be superior or equal to 0'
+        assert np.all(np.array(self.sigma) >=
+                      0), 'sigma should be superior or equal to 0'
         self.use_mask = use_mask
 
         self.n_dims = None
@@ -707,7 +753,8 @@ class GaussianBlur(Layer):
 
         # get shapes
         if self.use_mask:
-            assert len(input_shape) == 2, 'please provide a mask as second layer input when use_mask=True'
+            assert len(
+                input_shape) == 2, 'please provide a mask as second layer input when use_mask=True'
             self.n_dims = len(input_shape[0]) - 2
             self.n_channels = input_shape[0][-1]
         else:
@@ -719,7 +766,8 @@ class GaussianBlur(Layer):
         self.sigma = utils.reformat_to_list(self.sigma, length=self.n_dims)
         self.separable = np.linalg.norm(np.array(self.sigma)) > 5
         if self.blur_range is None:  # fixed kernels
-            self.kernels = l2i_et.gaussian_kernel(self.sigma, separable=self.separable)
+            self.kernels = l2i_et.gaussian_kernel(
+                self.sigma, separable=self.separable)
         else:
             self.kernels = None
 
@@ -740,7 +788,8 @@ class GaussianBlur(Layer):
 
         # redefine the kernels at each new step when blur_range is activated
         if self.blur_range is not None:
-            self.kernels = l2i_et.gaussian_kernel(self.sigma, blur_range=self.blur_range, separable=self.separable)
+            self.kernels = l2i_et.gaussian_kernel(
+                self.sigma, blur_range=self.blur_range, separable=self.separable)
 
         if self.separable:
             for k in self.kernels:
@@ -751,8 +800,9 @@ class GaussianBlur(Layer):
                         maskb = tf.cast(mask, 'float32')
                         maskb = tf.concat([self.convnd(tf.expand_dims(maskb[..., n], -1), k, self.stride, 'SAME')
                                            for n in range(self.n_channels)], -1)
-                        image = image / (maskb + K.epsilon())
-                        image = tf.where(mask, image, tf.zeros_like(image))
+                        image = image / (maskb + ops.epsilon())
+                        image = tf.compat.v1.where(
+                            mask, image, tf.zeros_like(image))
         else:
             if any(self.sigma):
                 image = tf.concat([self.convnd(tf.expand_dims(image[..., n], -1), self.kernels, self.stride, 'SAME')
@@ -761,8 +811,9 @@ class GaussianBlur(Layer):
                     maskb = tf.cast(mask, 'float32')
                     maskb = tf.concat([self.convnd(tf.expand_dims(maskb[..., n], -1), self.kernels, self.stride, 'SAME')
                                        for n in range(self.n_channels)], -1)
-                    image = image / (maskb + K.epsilon())
-                    image = tf.where(mask, image, tf.zeros_like(image))
+                    image = image / (maskb + ops.epsilon())
+                    image = tf.compat.v1.where(
+                        mask, image, tf.zeros_like(image))
 
         return image
 
@@ -798,11 +849,13 @@ class DynamicGaussianBlur(Layer):
         return config
 
     def build(self, input_shape):
-        assert len(input_shape) == 2, 'sigma should be provided as an input tensor for dynamic blurring'
+        assert len(
+            input_shape) == 2, 'sigma should be provided as an input tensor for dynamic blurring'
         self.n_dims = len(input_shape[0]) - 2
         self.n_channels = input_shape[0][-1]
         self.convnd = getattr(tf.nn, 'conv%dd' % self.n_dims)
-        self.max_sigma = utils.reformat_to_list(self.max_sigma, length=self.n_dims)
+        self.max_sigma = utils.reformat_to_list(
+            self.max_sigma, length=self.n_dims)
         self.separable = np.linalg.norm(np.array(self.max_sigma)) > 5
         self.built = True
         super(DynamicGaussianBlur, self).build(input_shape)
@@ -810,24 +863,30 @@ class DynamicGaussianBlur(Layer):
     def call(self, inputs, **kwargs):
         image = inputs[0]
         sigma = inputs[-1]
-        kernels = l2i_et.gaussian_kernel(sigma, self.max_sigma, self.blur_range, self.separable)
+        kernels = l2i_et.gaussian_kernel(
+            sigma, self.max_sigma, self.blur_range, self.separable)
         if self.separable:
             for kernel in kernels:
-                image = tf.map_fn(self._single_blur, [image, kernel], dtype=tf.float32)
+                image = tf.map_fn(self._single_blur, [
+                                  image, kernel], dtype=tf.float32)
         else:
-            image = tf.map_fn(self._single_blur, [image, kernels], dtype=tf.float32)
+            image = tf.map_fn(self._single_blur, [
+                              image, kernels], dtype=tf.float32)
         return image
 
     def _single_blur(self, inputs):
         if self.n_channels > 1:
-            split_channels = tf.split(inputs[0], [1] * self.n_channels, axis=-1)
+            split_channels = tf.split(
+                inputs[0], [1] * self.n_channels, axis=-1)
             blurred_channel = list()
             for channel in split_channels:
-                blurred = self.convnd(tf.expand_dims(channel, 0), inputs[1], [1] * (self.n_dims + 2), padding='SAME')
+                blurred = self.convnd(tf.expand_dims(channel, 0), inputs[1], [
+                                      1] * (self.n_dims + 2), padding='SAME')
                 blurred_channel.append(tf.squeeze(blurred, axis=0))
             output = tf.concat(blurred_channel, -1)
         else:
-            output = self.convnd(tf.expand_dims(inputs[0], 0), inputs[1], [1] * (self.n_dims + 2), padding='SAME')
+            output = self.convnd(tf.expand_dims(inputs[0], 0), inputs[1], [
+                                 1] * (self.n_dims + 2), padding='SAME')
             output = tf.squeeze(output, axis=0)
         return output
 
@@ -915,11 +974,14 @@ class MimicAcquisition(Layer):
         self.inshape = input_shape[0][1:]
         self.n_channels = input_shape[0][-1]
         self.add_batchsize = False if (input_shape[1][0] is None) else True
-        down_tensor_shape = np.int32(np.array(self.inshape[:-1]) * self.volume_res / self.min_subsample_res)
+        down_tensor_shape = np.int32(
+            np.array(self.inshape[:-1]) * self.volume_res / self.min_subsample_res)
 
         # build interpolation meshgrids
-        self.down_grid = tf.expand_dims(tf.stack(nrn_utils.volshape_to_ndgrid(down_tensor_shape), -1), axis=0)
-        self.up_grid = tf.expand_dims(tf.stack(nrn_utils.volshape_to_ndgrid(self.resample_shape), -1), axis=0)
+        self.down_grid = tf.expand_dims(
+            tf.stack(nrn_utils.volshape_to_ndgrid(down_tensor_shape), -1), axis=0)
+        self.up_grid = tf.expand_dims(
+            tf.stack(nrn_utils.volshape_to_ndgrid(self.resample_shape), -1), axis=0)
 
         self.built = True
         super(MimicAcquisition, self).build(input_shape)
@@ -927,42 +989,54 @@ class MimicAcquisition(Layer):
     def call(self, inputs, **kwargs):
 
         # sort inputs
-        assert len(inputs) == 2, 'inputs must have two items, the tensor to resample, and the downsampling resolution'
+        assert len(
+            inputs) == 2, 'inputs must have two items, the tensor to resample, and the downsampling resolution'
         vol = inputs[0]
         subsample_res = tf.cast(inputs[1], dtype='float32')
-        vol = K.reshape(vol, [-1, *self.inshape])  # necessary for multi_gpu models
+        # necessary for multi_gpu models
+        vol = ops.reshape(vol, [-1, *self.inshape])
         batchsize = tf.split(tf.shape(vol), [1, -1])[0]
         tile_shape = tf.concat([batchsize, tf.ones([1], dtype='int32')], 0)
 
         # get downsampling and upsampling factors
         if self.add_batchsize:
-            subsample_res = tf.tile(tf.expand_dims(subsample_res, 0), tile_shape)
+            subsample_res = tf.tile(
+                tf.expand_dims(subsample_res, 0), tile_shape)
         down_shape = tf.cast(tf.convert_to_tensor(np.array(self.inshape[:-1]) * self.volume_res, dtype='float32') /
                              subsample_res, dtype='int32')
-        down_zoom_factor = tf.cast(down_shape / tf.convert_to_tensor(self.inshape[:-1]), dtype='float32')
-        up_zoom_factor = tf.cast(tf.convert_to_tensor(self.resample_shape, dtype='int32') / down_shape, dtype='float32')
+        down_zoom_factor = tf.cast(
+            down_shape / tf.convert_to_tensor(self.inshape[:-1]), dtype='float32')
+        up_zoom_factor = tf.cast(tf.convert_to_tensor(
+            self.resample_shape, dtype='int32') / down_shape, dtype='float32')
 
         # downsample
-        down_loc = tf.tile(self.down_grid, tf.concat([batchsize, tf.ones([self.n_dims + 1], dtype='int32')], 0))
-        down_loc = tf.cast(down_loc, 'float32') / l2i_et.expand_dims(down_zoom_factor, axis=[1] * self.n_dims)
-        inshape_tens = tf.tile(tf.expand_dims(tf.convert_to_tensor(self.inshape[:-1]), 0), tile_shape)
+        down_loc = tf.tile(self.down_grid, tf.concat(
+            [batchsize, tf.ones([self.n_dims + 1], dtype='int32')], 0))
+        down_loc = tf.cast(down_loc, 'float32') / \
+            l2i_et.expand_dims(down_zoom_factor, axis=[1] * self.n_dims)
+        inshape_tens = tf.tile(tf.expand_dims(
+            tf.convert_to_tensor(self.inshape[:-1]), 0), tile_shape)
         inshape_tens = l2i_et.expand_dims(inshape_tens, axis=[1] * self.n_dims)
-        down_loc = K.clip(down_loc, 0., tf.cast(inshape_tens, 'float32'))
+        down_loc = ops.clip(down_loc, 0., tf.cast(inshape_tens, 'float32'))
         vol = tf.map_fn(self._single_down_interpn, [vol, down_loc], tf.float32)
 
         # add noise with predefined probability
         if self.noise_std > 0:
             sample_shape = tf.concat([batchsize, tf.ones([self.n_dims], dtype='int32'),
                                       self.n_channels * tf.ones([1], dtype='int32')], 0)
-            noise = tf.random.normal(tf.shape(vol), stddev=tf.random.uniform(sample_shape, maxval=self.noise_std))
+            noise = tf.random.normal(tf.shape(vol), stddev=tf.random.uniform(
+                sample_shape, maxval=self.noise_std))
             if self.prob_noise == 1:
                 vol += noise
             else:
-                vol = K.switch(tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_noise)), vol + noise, vol)
+                vol = ops.switch(tf.squeeze(ops.less(tf.random.uniform(
+                    [1], 0, 1), self.prob_noise)), [lambda: vol + noise, lambda: vol])
 
         # upsample
-        up_loc = tf.tile(self.up_grid, tf.concat([batchsize, tf.ones([self.n_dims + 1], dtype='int32')], axis=0))
-        up_loc = tf.cast(up_loc, 'float32') / l2i_et.expand_dims(up_zoom_factor, axis=[1] * self.n_dims)
+        up_loc = tf.tile(self.up_grid, tf.concat(
+            [batchsize, tf.ones([self.n_dims + 1], dtype='int32')], axis=0))
+        up_loc = tf.cast(up_loc, 'float32') / \
+            l2i_et.expand_dims(up_zoom_factor, axis=[1] * self.n_dims)
         vol = tf.map_fn(self._single_up_interpn, [vol, up_loc], tf.float32)
 
         # return upsampled volume
@@ -981,8 +1055,10 @@ class MimicAcquisition(Layer):
             c_dist = ceil - up_loc
 
             # keep minimum 1d distances, and compute 3d distance to nearest grid point
-            dist = tf.math.minimum(f_dist, c_dist) * l2i_et.expand_dims(subsample_res, axis=[1] * self.n_dims)
-            dist = tf.math.sqrt(tf.math.reduce_sum(tf.math.square(dist), axis=-1, keepdims=True))
+            dist = tf.math.minimum(
+                f_dist, c_dist) * l2i_et.expand_dims(subsample_res, axis=[1] * self.n_dims)
+            dist = tf.math.sqrt(tf.math.reduce_sum(
+                tf.math.square(dist), axis=-1, keepdims=True))
 
             return [vol, dist]
 
@@ -995,7 +1071,8 @@ class MimicAcquisition(Layer):
         return nrn_utils.interpn(inputs[0], inputs[1], interp_method='linear')
 
     def compute_output_shape(self, input_shape):
-        output_shape = tuple([None] + self.resample_shape + [input_shape[0][-1]])
+        output_shape = tuple(
+            [None] + self.resample_shape + [input_shape[0][-1]])
         return [output_shape] * 2 if self.build_dist_map else output_shape
 
 
@@ -1056,7 +1133,8 @@ class BiasFieldCorruption(Layer):
 
         # sampling shapes
         self.std_shape = [1] * (self.n_dims + 1)
-        self.small_bias_shape = utils.get_resample_shape(self.inshape[0][1:self.n_dims + 1], self.bias_scale, 1)
+        self.small_bias_shape = utils.get_resample_shape(
+            self.inshape[0][1:self.n_dims + 1], self.bias_scale, 1)
         if not self.same_bias_for_all_channels:
             self.std_shape[-1] = self.n_channels
             self.small_bias_shape[-1] = self.n_channels
@@ -1073,25 +1151,30 @@ class BiasFieldCorruption(Layer):
 
             # sampling shapes
             batchsize = tf.split(tf.shape(inputs[0]), [1, -1])[0]
-            std_shape = tf.concat([batchsize, tf.convert_to_tensor(self.std_shape, dtype='int32')], 0)
-            bias_shape = tf.concat([batchsize, tf.convert_to_tensor(self.small_bias_shape, dtype='int32')], axis=0)
+            std_shape = tf.concat(
+                [batchsize, tf.convert_to_tensor(self.std_shape, dtype='int32')], 0)
+            bias_shape = tf.concat([batchsize, tf.convert_to_tensor(
+                self.small_bias_shape, dtype='int32')], axis=0)
 
             # sample small bias field
-            bias_field = tf.random.normal(bias_shape, stddev=tf.random.uniform(std_shape, maxval=self.bias_field_std))
+            bias_field = tf.random.normal(bias_shape, stddev=tf.random.uniform(
+                std_shape, maxval=self.bias_field_std))
 
             # resize bias field and take exponential
-            bias_field = nrn_layers.Resize(size=self.inshape[0][1:self.n_dims + 1], interp_method='linear')(bias_field)
+            bias_field = nrn_layers.Resize(
+                size=self.inshape[0][1:self.n_dims + 1], interp_method='linear')(bias_field)
             bias_field = tf.math.exp(bias_field)
 
             # apply bias field with predefined probability
             if self.prob == 1:
                 return [tf.math.multiply(bias_field, v) for v in inputs]
             else:
-                rand_trans = tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob))
+                rand_trans = tf.squeeze(
+                    ops.less(tf.random.uniform([1], 0, 1), self.prob))
                 if self.several_inputs:
-                    return [K.switch(rand_trans, tf.math.multiply(bias_field, v), v) for v in inputs]
+                    return [ops.switch(rand_trans, [lambda: tf.math.multiply(bias_field, v), lambda: v]) for v in inputs]
                 else:
-                    return K.switch(rand_trans, tf.math.multiply(bias_field, inputs[0]), inputs[0])
+                    return ops.switch(rand_trans, [lambda: tf.math.multiply(bias_field, inputs[0]), lambda: inputs[0]])
 
         else:
             return inputs
@@ -1166,17 +1249,20 @@ class IntensityAugmentation(Layer):
         self.n_dims = len(input_shape) - 2
         self.n_channels = input_shape[-1]
         self.flatten_shape = np.prod(np.array(input_shape[1:-1]))
-        self.flatten_shape = self.flatten_shape * self.n_channels if not self.separate_channels else self.flatten_shape
+        self.flatten_shape = self.flatten_shape * \
+            self.n_channels if not self.separate_channels else self.flatten_shape
         self.expand_minmax_dim = self.n_dims if self.separate_channels else self.n_dims + 1
         self.one = tf.ones([1], dtype='int32')
         if self.clip:
             self.clip_values = utils.reformat_to_list(self.clip)
-            self.clip_values = self.clip_values if len(self.clip_values) == 2 else [0, self.clip_values[0]]
+            self.clip_values = self.clip_values if len(self.clip_values) == 2 else [
+                0, self.clip_values[0]]
         else:
             self.clip_values = None
         if self.norm_perc:
             self.perc = utils.reformat_to_list(self.norm_perc)
-            self.perc = self.perc if len(self.perc) == 2 else [self.perc[0], 1 - self.perc[0]]
+            self.perc = self.perc if len(self.perc) == 2 else [
+                self.perc[0], 1 - self.perc[0]]
         else:
             self.perc = None
 
@@ -1188,9 +1274,11 @@ class IntensityAugmentation(Layer):
         # prepare shape for sampling the noise and gamma std dev (depending on whether we augment channels separately)
         batchsize = tf.split(tf.shape(inputs), [1, -1])[0]
         if (self.noise_std > 0) | (self.gamma_std > 0) | self.contrast_inversion:
-            sample_shape = tf.concat([batchsize, tf.ones([self.n_dims], dtype='int32')], 0)
+            sample_shape = tf.concat(
+                [batchsize, tf.ones([self.n_dims], dtype='int32')], 0)
             if self.separate_channels:
-                sample_shape = tf.concat([sample_shape, self.n_channels * self.one], 0)
+                sample_shape = tf.concat(
+                    [sample_shape, self.n_channels * self.one], 0)
             else:
                 sample_shape = tf.concat([sample_shape, self.one], 0)
         else:
@@ -1198,37 +1286,46 @@ class IntensityAugmentation(Layer):
 
         # add noise with predefined probability
         if self.noise_std > 0:
-            noise_stddev = tf.random.uniform(sample_shape, maxval=self.noise_std)
+            noise_stddev = tf.random.uniform(
+                sample_shape, maxval=self.noise_std)
             if self.separate_channels:
                 noise = tf.random.normal(tf.shape(inputs), stddev=noise_stddev)
             else:
-                noise = tf.random.normal(tf.shape(tf.split(inputs, [1, -1], -1)[0]), stddev=noise_stddev)
-                noise = tf.tile(noise, tf.convert_to_tensor([1] * (self.n_dims + 1) + [self.n_channels]))
+                noise = tf.random.normal(
+                    tf.shape(tf.split(inputs, [1, -1], -1)[0]), stddev=noise_stddev)
+                noise = tf.tile(noise, tf.convert_to_tensor(
+                    [1] * (self.n_dims + 1) + [self.n_channels]))
             if self.prob_noise == 1:
                 inputs = inputs + noise
             else:
-                inputs = K.switch(tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_noise)),
-                                  inputs + noise, inputs)
+                inputs = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_noise)),
+                                    inputs + noise, inputs)
 
         # clip images to given values
         if self.clip_values is not None:
-            inputs = K.clip(inputs, self.clip_values[0], self.clip_values[1])
+            inputs = ops.clip(inputs, self.clip_values[0], self.clip_values[1])
 
         # normalise
         if self.normalise:
             # define robust min and max by sorting values and taking percentile
             if self.perc is not None:
                 if self.separate_channels:
-                    shape = tf.concat([batchsize, self.flatten_shape * self.one, self.n_channels * self.one], 0)
+                    shape = tf.concat(
+                        [batchsize, self.flatten_shape * self.one, self.n_channels * self.one], 0)
                 else:
-                    shape = tf.concat([batchsize, self.flatten_shape * self.one], 0)
-                intensities = tf.sort(tf.reshape(inputs, shape), axis=1)
-                m = intensities[:, max(int(self.perc[0] * self.flatten_shape), 0), ...]
-                M = intensities[:, min(int(self.perc[1] * self.flatten_shape), self.flatten_shape - 1), ...]
+                    shape = tf.concat(
+                        [batchsize, self.flatten_shape * self.one], 0)
+                intensities = tf.sort(ops.reshape(inputs, shape), axis=1)
+                m = intensities[:, max(
+                    int(self.perc[0] * self.flatten_shape), 0), ...]
+                M = intensities[:, min(
+                    int(self.perc[1] * self.flatten_shape), self.flatten_shape - 1), ...]
             # simple min and max
             else:
-                m = K.min(inputs, axis=list(range(1, self.expand_minmax_dim + 1)))
-                M = K.max(inputs, axis=list(range(1, self.expand_minmax_dim + 1)))
+                m = ops.min(inputs, axis=list(
+                    range(1, self.expand_minmax_dim + 1)))
+                M = ops.max(inputs, axis=list(
+                    range(1, self.expand_minmax_dim + 1)))
             # normalise
             m = l2i_et.expand_dims(m, axis=[1] * self.expand_minmax_dim)
             M = l2i_et.expand_dims(M, axis=[1] * self.expand_minmax_dim)
@@ -1241,24 +1338,27 @@ class IntensityAugmentation(Layer):
             if self.prob_gamma == 1:
                 inputs = tf.math.pow(inputs, tf.math.exp(gamma))
             else:
-                inputs = K.switch(tf.squeeze(K.less(tf.random.uniform([1], 0, 1), self.prob_gamma)),
-                                  tf.math.pow(inputs, tf.math.exp(gamma)), inputs)
+                inputs = ops.switch(tf.squeeze(ops.less(tf.random.uniform([1], 0, 1), self.prob_gamma)),
+                                    tf.math.pow(inputs, tf.math.exp(gamma)), inputs)
 
         # apply random contrast inversion
         if self.contrast_inversion:
-            rand_invert = tf.less(tf.random.uniform(sample_shape, maxval=1), 0.5)
+            rand_invert = tf.less(tf.random.uniform(
+                sample_shape, maxval=1), 0.5)
             split_channels = tf.split(inputs, [1] * self.n_channels, axis=-1)
-            split_rand_invert = tf.split(rand_invert, [1] * self.n_channels, axis=-1)
+            split_rand_invert = tf.split(
+                rand_invert, [1] * self.n_channels, axis=-1)
             inverted_channel = list()
             for (channel, invert) in zip(split_channels, split_rand_invert):
-                inverted_channel.append(tf.map_fn(self._single_invert, [channel, invert], dtype=channel.dtype))
+                inverted_channel.append(tf.map_fn(self._single_invert, [
+                                        channel, invert], dtype=channel.dtype))
             inputs = tf.concat(inverted_channel, -1)
 
         return inputs
 
     @staticmethod
     def _single_invert(inputs):
-        return K.switch(tf.squeeze(inputs[1]), 1 - inputs[0], inputs[0])
+        return ops.switch(tf.squeeze(inputs[1]), 1 - inputs[0], inputs[0])
 
 
 class DiceLoss(Layer):
@@ -1310,7 +1410,8 @@ class DiceLoss(Layer):
     def build(self, input_shape):
 
         # get shape
-        assert len(input_shape) == 2, 'DiceLoss expects 2 inputs to compute the Dice loss.'
+        assert len(
+            input_shape) == 2, 'DiceLoss expects 2 inputs to compute the Dice loss.'
         assert input_shape[0] == input_shape[1], 'the two inputs must have the same shape.'
         inshape = input_shape[0][1:]
         n_dims = len(inshape[:-1])
@@ -1324,9 +1425,12 @@ class DiceLoss(Layer):
             if self.class_weights == -1:
                 self.dynamic_weighting = True
             else:
-                class_weights_tens = utils.reformat_to_list(self.class_weights, n_labels)
-                class_weights_tens = tf.convert_to_tensor(class_weights_tens, 'float32')
-                self.class_weights_tens = l2i_et.expand_dims(class_weights_tens, 0)
+                class_weights_tens = utils.reformat_to_list(
+                    self.class_weights, n_labels)
+                class_weights_tens = tf.convert_to_tensor(
+                    class_weights_tens, 'float32')
+                self.class_weights_tens = l2i_et.expand_dims(
+                    class_weights_tens, 0)
 
         self.built = True
         super(DiceLoss, self).build(input_shape)
@@ -1337,8 +1441,10 @@ class DiceLoss(Layer):
         gt = inputs[0]
         pred = inputs[1]
         if self.enable_checks:  # disabling is useful to, e.g., use incomplete label maps
-            gt = K.clip(gt / (tf.math.reduce_sum(gt, axis=-1, keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
-            pred = K.clip(pred / (tf.math.reduce_sum(pred, axis=-1, keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
+            gt = ops.clip(gt / (tf.math.reduce_sum(gt, axis=-1,
+                                                   keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
+            pred = ops.clip(pred / (tf.math.reduce_sum(pred, axis=-1,
+                                                       keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
 
         # compute dice loss for each label
         top = 2 * gt * pred
@@ -1346,11 +1452,14 @@ class DiceLoss(Layer):
 
         # apply boundary weighting (ie voxels close to region boundaries will be counted several times to compute Dice)
         if self.boundary_weights:
-            avg = self.avg_pooling_layer(pool_size=2 * self.boundary_dist + 1, strides=1, padding='same')(gt)
-            boundaries = tf.cast(avg > 0., 'float32') * tf.cast(avg < (1 / len(self.spatial_axes) - 1e-4), 'float32')
+            avg = self.avg_pooling_layer(
+                pool_size=2 * self.boundary_dist + 1, strides=1, padding='same')(gt)
+            boundaries = tf.cast(avg > 0., 'float32') * tf.cast(avg <
+                                                                (1 / len(self.spatial_axes) - 1e-4), 'float32')
             if self.skip_background:
                 boundaries_channels = tf.unstack(boundaries, axis=-1)
-                boundaries = tf.stack([tf.zeros_like(boundaries_channels[0])] + boundaries_channels[1:], axis=-1)
+                boundaries = tf.stack(
+                    [tf.zeros_like(boundaries_channels[0])] + boundaries_channels[1:], axis=-1)
             boundary_weights_tensor = 1 + self.boundary_weights * boundaries
             top *= boundary_weights_tensor
             bottom *= boundary_weights_tensor
@@ -1360,17 +1469,22 @@ class DiceLoss(Layer):
         # compute loss
         top = tf.math.reduce_sum(top, self.spatial_axes)
         bottom = tf.math.reduce_sum(bottom, self.spatial_axes)
-        dice = (top + tf.keras.backend.epsilon()) / (bottom + tf.keras.backend.epsilon())
+        dice = (top + tf.keras.backend.epsilon()) / \
+            (bottom + tf.keras.backend.epsilon())
         loss = 1 - dice
 
         # apply class weighting across labels. In this case loss will have shape (batch), otherwise (batch, n_labels).
         if self.dynamic_weighting:  # the weight of a class is the inverse of its volume in the gt
             if boundary_weights_tensor is not None:  # we account for the boundary weighting to compute volume
-                self.class_weights_tens = 1 / tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes)
+                self.class_weights_tens = 1 / \
+                    tf.reduce_sum(gt * boundary_weights_tensor,
+                                  self.spatial_axes)
             else:
-                self.class_weights_tens = 1 / tf.reduce_sum(gt, self.spatial_axes)
+                self.class_weights_tens = 1 / \
+                    tf.reduce_sum(gt, self.spatial_axes)
         if self.class_weights_tens is not None:
-            self. class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
+            self. class_weights_tens /= tf.reduce_sum(
+                self.class_weights_tens, -1)
             loss = tf.reduce_sum(loss * self.class_weights_tens, -1)
 
         return tf.math.reduce_mean(loss)
@@ -1399,7 +1513,8 @@ class WeightedL2Loss(Layer):
         return config
 
     def build(self, input_shape):
-        assert len(input_shape) == 2, 'DiceLoss expects 2 inputs to compute the Dice loss.'
+        assert len(
+            input_shape) == 2, 'DiceLoss expects 2 inputs to compute the Dice loss.'
         assert input_shape[0] == input_shape[1], 'the two inputs must have the same shape.'
         self.n_labels = input_shape[0][-1]
         self.built = True
@@ -1409,7 +1524,7 @@ class WeightedL2Loss(Layer):
         gt = inputs[0]
         pred = inputs[1]
         weights = tf.expand_dims(1 - gt[..., 0] + 1e-8, -1)
-        return K.sum(weights * K.square(pred - self.target_value * (2 * gt - 1))) / (K.sum(weights) * self.n_labels)
+        return ops.sum(weights * ops.square(pred - self.target_value * (2 * gt - 1))) / (ops.sum(weights) * self.n_labels)
 
     def compute_output_shape(self, input_shape):
         return [[]]
@@ -1464,7 +1579,8 @@ class CrossEntropyLoss(Layer):
     def build(self, input_shape):
 
         # get shape
-        assert len(input_shape) == 2, 'CrossEntropy expects 2 inputs to compute the Dice loss.'
+        assert len(
+            input_shape) == 2, 'CrossEntropy expects 2 inputs to compute the Dice loss.'
         assert input_shape[0] == input_shape[1], 'the two inputs must have the same shape.'
         inshape = input_shape[0][1:]
         n_dims = len(inshape[:-1])
@@ -1478,9 +1594,12 @@ class CrossEntropyLoss(Layer):
             if self.class_weights == -1:
                 self.dynamic_weighting = True
             else:
-                class_weights_tens = utils.reformat_to_list(self.class_weights, n_labels)
-                class_weights_tens = tf.convert_to_tensor(class_weights_tens, 'float32')
-                self.class_weights_tens = l2i_et.expand_dims(class_weights_tens, [0] * (1 + n_dims))
+                class_weights_tens = utils.reformat_to_list(
+                    self.class_weights, n_labels)
+                class_weights_tens = tf.convert_to_tensor(
+                    class_weights_tens, 'float32')
+                self.class_weights_tens = l2i_et.expand_dims(
+                    class_weights_tens, [0] * (1 + n_dims))
 
         self.built = True
         super(CrossEntropyLoss, self).build(input_shape)
@@ -1491,20 +1610,26 @@ class CrossEntropyLoss(Layer):
         gt = inputs[0]
         pred = inputs[1]
         if self.enable_checks:  # disabling is useful to, e.g., use incomplete label maps
-            gt = K.clip(gt / (tf.math.reduce_sum(gt, axis=-1, keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
-            pred = pred / (tf.math.reduce_sum(pred, axis=-1, keepdims=True) + tf.keras.backend.epsilon())
-            pred = K.clip(pred, tf.keras.backend.epsilon(), 1 - tf.keras.backend.epsilon())  # to avoid log(0)
+            gt = ops.clip(gt / (tf.math.reduce_sum(gt, axis=-1,
+                                                   keepdims=True) + tf.keras.backend.epsilon()), 0, 1)
+            pred = pred / (tf.math.reduce_sum(pred, axis=-1,
+                           keepdims=True) + tf.keras.backend.epsilon())
+            pred = ops.clip(pred, tf.keras.backend.epsilon(), 1 -
+                            tf.keras.backend.epsilon())  # to avoid log(0)
 
         # compare prediction/target, ce has the same shape has the input tensors
         ce = -gt * tf.math.log(pred)
 
         # apply boundary weighting (ie voxels close to region boundaries will be counted several times to compute Dice)
         if self.boundary_weights:
-            avg = self.avg_pooling_layer(pool_size=2 * self.boundary_dist + 1, strides=1, padding='same')(gt)
-            boundaries = tf.cast(avg > 0., 'float32') * tf.cast(avg < (1 / len(self.spatial_axes) - 1e-4), 'float32')
+            avg = self.avg_pooling_layer(
+                pool_size=2 * self.boundary_dist + 1, strides=1, padding='same')(gt)
+            boundaries = tf.cast(avg > 0., 'float32') * tf.cast(avg <
+                                                                (1 / len(self.spatial_axes) - 1e-4), 'float32')
             if self.skip_background:
                 boundaries_channels = tf.unstack(boundaries, axis=-1)
-                boundaries = tf.stack([tf.zeros_like(boundaries_channels[0])] + boundaries_channels[1:], axis=-1)
+                boundaries = tf.stack(
+                    [tf.zeros_like(boundaries_channels[0])] + boundaries_channels[1:], axis=-1)
             boundary_weights_tensor = 1 + self.boundary_weights * boundaries
             ce *= boundary_weights_tensor
         else:
@@ -1513,11 +1638,15 @@ class CrossEntropyLoss(Layer):
         # apply class weighting across labels. By the end of this, ce still has the same shape has the input tensors.
         if self.dynamic_weighting:  # the weight of a class is the inverse of its volume in the gt
             if boundary_weights_tensor is not None:  # we account for the boundary weighting to compute volume
-                self.class_weights_tens = 1 / tf.reduce_sum(gt * boundary_weights_tensor, self.spatial_axes, True)
+                self.class_weights_tens = 1 / \
+                    tf.reduce_sum(gt * boundary_weights_tensor,
+                                  self.spatial_axes, True)
             else:
-                self.class_weights_tens = 1 / tf.reduce_sum(gt, self.spatial_axes)
+                self.class_weights_tens = 1 / \
+                    tf.reduce_sum(gt, self.spatial_axes)
         if self.class_weights_tens is not None:
-            self.class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
+            self.class_weights_tens /= tf.reduce_sum(
+                self.class_weights_tens, -1)
             ce = tf.reduce_sum(ce * self.class_weights_tens, -1)
 
         # sum along label axis, and take the mean along spatial dimensions
@@ -1560,7 +1689,8 @@ class MomentLoss(Layer):
     def build(self, input_shape):
 
         # get shape
-        assert len(input_shape) == 2, 'MomentLoss expects 2 inputs to compute the Dice loss.'
+        assert len(
+            input_shape) == 2, 'MomentLoss expects 2 inputs to compute the Dice loss.'
         assert input_shape[0] == input_shape[1], 'the two inputs must have the same shape.'
         inshape = input_shape[0][1:]
         n_dims = len(inshape[:-1])
@@ -1568,17 +1698,22 @@ class MomentLoss(Layer):
         self.spatial_axes = list(range(1, n_dims + 1))
 
         # build coordinate meshgrid of size (1, dim1, dim2, ..., dimN, ndim, nchan)
-        self.coordinates = tf.stack(nrn_utils.volshape_to_ndgrid(inshape[:-1]), -1)
-        self.coordinates = tf.cast(l2i_et.expand_dims(tf.stack([self.coordinates] * n_labels, -1), 0), 'float32')
+        self.coordinates = tf.stack(
+            nrn_utils.volshape_to_ndgrid(inshape[:-1]), -1)
+        self.coordinates = tf.cast(l2i_et.expand_dims(
+            tf.stack([self.coordinates] * n_labels, -1), 0), 'float32')
 
         # build tensor with class weights
         if self.class_weights is not None:
             if self.class_weights == -1:
                 self.dynamic_weighting = True
             else:
-                class_weights_tens = utils.reformat_to_list(self.class_weights, n_labels)
-                class_weights_tens = tf.convert_to_tensor(class_weights_tens, 'float32')
-                self.class_weights_tens = l2i_et.expand_dims(class_weights_tens, 0)
+                class_weights_tens = utils.reformat_to_list(
+                    self.class_weights, n_labels)
+                class_weights_tens = tf.convert_to_tensor(
+                    class_weights_tens, 'float32')
+                self.class_weights_tens = l2i_et.expand_dims(
+                    class_weights_tens, 0)
 
         self.built = True
         super(MomentLoss, self).build(input_shape)
@@ -1589,27 +1724,34 @@ class MomentLoss(Layer):
         gt = inputs[0]  # (B, dim1, dim2, ..., dimN, nchan)
         pred = inputs[1]
         if self.enable_checks:  # disabling is useful to, e.g., use incomplete label maps
-            gt = gt / (tf.math.reduce_sum(gt, axis=-1, keepdims=True) + tf.keras.backend.epsilon())
-            pred = pred / (tf.math.reduce_sum(pred, axis=-1, keepdims=True) + tf.keras.backend.epsilon())
+            gt = gt / (tf.math.reduce_sum(gt, axis=-1,
+                       keepdims=True) + tf.keras.backend.epsilon())
+            pred = pred / (tf.math.reduce_sum(pred, axis=-1,
+                           keepdims=True) + tf.keras.backend.epsilon())
 
         # compute loss
         gt_mean_coordinates = self._mean_coordinates(gt)  # (B, ndim, nchan)
         pred_mean_coordinates = self._mean_coordinates(pred)
-        loss = tf.math.sqrt(tf.reduce_sum(tf.square(pred_mean_coordinates - gt_mean_coordinates), axis=1))  # (B, nchan)
+        loss = tf.math.sqrt(tf.reduce_sum(
+            tf.square(pred_mean_coordinates - gt_mean_coordinates), axis=1))  # (B, nchan)
 
         # apply class weighting across labels. In this case loss will have shape (batch), otherwise (batch, n_labels).
         if self.dynamic_weighting:  # the weight of a class is the inverse of its volume in the gt
             self.class_weights_tens = 1 / tf.reduce_sum(gt, self.spatial_axes)
         if self.class_weights_tens is not None:
-            self.class_weights_tens /= tf.reduce_sum(self.class_weights_tens, -1)
+            self.class_weights_tens /= tf.reduce_sum(
+                self.class_weights_tens, -1)
             loss = tf.reduce_sum(loss * self.class_weights_tens, -1)
 
         return tf.math.reduce_mean(loss)
 
     def _mean_coordinates(self, tensor):
-        tensor = l2i_et.expand_dims(tensor, axis=-2)  # (B, dim1, dim2, ..., dimN, 1, nchan)
-        numerator = tf.reduce_sum(tensor * self.coordinates, axis=self.spatial_axes)  # (B, ndim, nchan)
-        denominator = tf.reduce_sum(tensor, axis=self.spatial_axes) + tf.keras.backend.epsilon()
+        # (B, dim1, dim2, ..., dimN, 1, nchan)
+        tensor = l2i_et.expand_dims(tensor, axis=-2)
+        numerator = tf.reduce_sum(
+            tensor * self.coordinates, axis=self.spatial_axes)  # (B, ndim, nchan)
+        denominator = tf.reduce_sum(
+            tensor, axis=self.spatial_axes) + tf.keras.backend.epsilon()
         return numerator / denominator
 
     def compute_output_shape(self, input_shape):
@@ -1652,7 +1794,8 @@ class ResetValuesToZero(Layer):
     def call(self, inputs, **kwargs):
         values = tf.cast(self.values_tens, dtype=inputs.dtype)
         for i in range(self.n_values):
-            inputs = tf.where(tf.equal(inputs, values[i]), tf.zeros_like(inputs), inputs)
+            inputs = tf.compat.v1.where(
+                tf.equal(inputs, values[i]), tf.zeros_like(inputs), inputs)
         return inputs
 
 
@@ -1681,7 +1824,8 @@ class ConvertLabels(Layer):
         return config
 
     def build(self, input_shape):
-        self.lut = tf.convert_to_tensor(utils.get_mapping_lut(self.source_values, dest=self.dest_values), dtype='int32')
+        self.lut = tf.convert_to_tensor(utils.get_mapping_lut(
+            self.source_values, dest=self.dest_values), dtype='int32')
         self.built = True
         super(ConvertLabels, self).build(input_shape)
 
@@ -1728,7 +1872,8 @@ class PadAroundCentre(Layer):
             assert self.pad_shape is None, 'please do not provide a padding shape and margin at the same time.'
 
             # reformat padding margins
-            pad = np.transpose(np.array([[0] + utils.reformat_to_list(self.pad_margin, self.n_dims) + [0]] * 2))
+            pad = np.transpose(np.array(
+                [[0] + utils.reformat_to_list(self.pad_margin, self.n_dims) + [0]] * 2))
             self.pad_margin_tens = tf.convert_to_tensor(pad, dtype='int32')
 
         elif self.pad_shape is not None:
@@ -1736,17 +1881,22 @@ class PadAroundCentre(Layer):
 
             # pad shape
             tensor_shape = tf.cast(tf.convert_to_tensor(shape), 'int32')
-            self.pad_shape_tens = np.array([0] + utils.reformat_to_list(self.pad_shape, length=self.n_dims) + [0])
-            self.pad_shape_tens = tf.convert_to_tensor(self.pad_shape_tens, dtype='int32')
-            self.pad_shape_tens = tf.math.maximum(tensor_shape, self.pad_shape_tens)
+            self.pad_shape_tens = np.array(
+                [0] + utils.reformat_to_list(self.pad_shape, length=self.n_dims) + [0])
+            self.pad_shape_tens = tf.convert_to_tensor(
+                self.pad_shape_tens, dtype='int32')
+            self.pad_shape_tens = tf.math.maximum(
+                tensor_shape, self.pad_shape_tens)
 
             # padding margin
             min_margins = (self.pad_shape_tens - tensor_shape) / 2
             max_margins = self.pad_shape_tens - tensor_shape - min_margins
-            self.pad_margin_tens = tf.stack([min_margins, max_margins], axis=-1)
+            self.pad_margin_tens = tf.stack(
+                [min_margins, max_margins], axis=-1)
 
         else:
-            raise Exception('please either provide a padding shape or a padding margin.')
+            raise Exception(
+                'please either provide a padding shape or a padding margin.')
 
         self.built = True
         super(PadAroundCentre, self).build(input_shape)
@@ -1797,7 +1947,8 @@ class MaskEdges(Layer):
 
     def __init__(self, axes, boundaries, prob_mask=1, **kwargs):
         self.axes = utils.reformat_to_list(axes, dtype='int')
-        self.boundaries = utils.reformat_to_n_channels_array(boundaries, n_dims=4, n_channels=len(self.axes))
+        self.boundaries = utils.reformat_to_n_channels_array(
+            boundaries, n_dims=4, n_channels=len(self.axes))
         self.prob_mask = prob_mask
         self.inputshape = None
         super(MaskEdges, self).__init__(**kwargs)
@@ -1823,13 +1974,16 @@ class MaskEdges(Layer):
             # select restricting indices
             axis_boundaries = self.boundaries[i, :]
             idx1 = tf.math.round(tf.random.uniform([1],
-                                                   minval=axis_boundaries[0] * self.inputshape[axis],
+                                                   minval=axis_boundaries[0] *
+                                                   self.inputshape[axis],
                                                    maxval=axis_boundaries[1] * self.inputshape[axis]))
             idx2 = tf.math.round(tf.random.uniform([1],
-                                                   minval=axis_boundaries[2] * self.inputshape[axis],
+                                                   minval=axis_boundaries[2] *
+                                                   self.inputshape[axis],
                                                    maxval=axis_boundaries[3] * self.inputshape[axis] - 1) - idx1)
             idx3 = self.inputshape[axis] - idx1 - idx2
-            split_idx = tf.cast(tf.concat([idx1, idx2, idx3], axis=0), dtype='int32')
+            split_idx = tf.cast(
+                tf.concat([idx1, idx2, idx3], axis=0), dtype='int32')
 
             # update mask
             split_list = tf.split(inputs, split_idx, axis=axis)
@@ -1839,9 +1993,9 @@ class MaskEdges(Layer):
             mask = mask * tmp_mask
 
         # mask second_channel
-        tensor = K.switch(tf.squeeze(K.greater(tf.random.uniform([1], 0, 1), 1 - self.prob_mask)),
-                          inputs * mask,
-                          inputs)
+        tensor = ops.switch(tf.squeeze(ops.greater(tf.random.uniform([1], 0, 1), 1 - self.prob_mask)),
+                            inputs * mask,
+                            inputs)
 
         return [tensor, mask]
 
@@ -1917,27 +2071,35 @@ class ImageGradients(Layer):
 
             # get 1-step diff
             if self.n_dims == 2:
-                gradients.append(image[:, 1:, :, :] - image[:, :-1, :, :])  # dx
-                gradients.append(image[:, :, 1:, :] - image[:, :, :-1, :])  # dy
+                gradients.append(image[:, 1:, :, :] -
+                                 image[:, :-1, :, :])  # dx
+                gradients.append(image[:, :, 1:, :] -
+                                 image[:, :, :-1, :])  # dy
 
             elif self.n_dims == 3:
-                gradients.append(image[:, 1:, :, :, :] - image[:, :-1, :, :, :])  # dx
-                gradients.append(image[:, :, 1:, :, :] - image[:, :, :-1, :, :])  # dy
-                gradients.append(image[:, :, :, 1:, :] - image[:, :, :, :-1, :])  # dz
+                gradients.append(image[:, 1:, :, :, :] -
+                                 image[:, :-1, :, :, :])  # dx
+                gradients.append(image[:, :, 1:, :, :] -
+                                 image[:, :, :-1, :, :])  # dy
+                gradients.append(image[:, :, :, 1:, :] -
+                                 image[:, :, :, :-1, :])  # dz
 
             else:
-                raise Exception('ImageGradients only support 2D or 3D tensors for 1-step diff, had: %dD' % self.n_dims)
+                raise Exception(
+                    'ImageGradients only support 2D or 3D tensors for 1-step diff, had: %dD' % self.n_dims)
 
             # pad with zeros to return tensors of the same shape as input
             for i in range(self.n_dims):
                 tmp_shape = list(self.shape)
                 tmp_shape[i] = 1
-                zeros = tf.zeros(tf.concat([batchsize, tf.convert_to_tensor(tmp_shape, dtype='int32')], 0), image.dtype)
+                zeros = tf.zeros(tf.concat([batchsize, tf.convert_to_tensor(
+                    tmp_shape, dtype='int32')], 0), image.dtype)
                 gradients[i] = tf.concat([gradients[i], zeros], axis=i + 1)
 
         # compute total gradient magnitude if necessary, or concatenate different gradients along the channel axis
         if self.return_magnitude:
-            gradients = tf.sqrt(tf.reduce_sum(tf.square(tf.stack(gradients, axis=-1)), axis=-1))
+            gradients = tf.sqrt(tf.reduce_sum(
+                tf.square(tf.stack(gradients, axis=-1)), axis=-1))
         else:
             gradients = tf.concat(gradients, axis=-1)
 
@@ -2007,7 +2169,8 @@ class RandomDilationErosion(Layer):
 
         # sample probability of applying operation. If random negative is erosion and positive is dilation
         batchsize = tf.split(tf.shape(inputs), [1, -1])[0]
-        shape = tf.concat([batchsize, tf.convert_to_tensor([1], dtype='int32')], axis=0)
+        shape = tf.concat(
+            [batchsize, tf.convert_to_tensor([1], dtype='int32')], axis=0)
         if self.operation == 'dilation':
             prob = tf.random.uniform(shape, 0, 1)
         elif self.operation == 'erosion':
@@ -2015,21 +2178,26 @@ class RandomDilationErosion(Layer):
         elif self.operation == 'random':
             prob = tf.random.uniform(shape, -1, 1)
         else:
-            raise ValueError("operation should either be 'dilation' 'erosion' or 'random', had %s" % self.operation)
+            raise ValueError(
+                "operation should either be 'dilation' 'erosion' or 'random', had %s" % self.operation)
 
         # build kernel
         if self.min_factor == self.max_factor:
             dist_threshold = self.min_factor * tf.ones(shape, dtype='int32')
         else:
             if (self.max_factor == self.max_factor_dilate) | (self.operation != 'random'):
-                dist_threshold = tf.random.uniform(shape, minval=self.min_factor, maxval=self.max_factor, dtype='int32')
+                dist_threshold = tf.random.uniform(
+                    shape, minval=self.min_factor, maxval=self.max_factor, dtype='int32')
             else:
-                dist_threshold = tf.cast(tf.map_fn(self._sample_factor, [prob], dtype=tf.float32), dtype='int32')
-        kernel = l2i_et.unit_kernel(dist_threshold, self.n_dims, max_dist_threshold=self.max_factor)
+                dist_threshold = tf.cast(tf.map_fn(self._sample_factor, [
+                                         prob], dtype=tf.float32), dtype='int32')
+        kernel = l2i_et.unit_kernel(
+            dist_threshold, self.n_dims, max_dist_threshold=self.max_factor)
 
         # convolve input mask with kernel according to given probability
         mask = tf.cast(tf.cast(inputs, dtype='bool'), dtype='float32')
-        mask = tf.map_fn(self._single_blur, [mask, kernel, prob], dtype=tf.float32)
+        mask = tf.map_fn(self._single_blur, [
+                         mask, kernel, prob], dtype=tf.float32)
         mask = tf.cast(mask, 'bool')
 
         if self.return_mask:
@@ -2038,22 +2206,23 @@ class RandomDilationErosion(Layer):
             return inputs * tf.cast(mask, dtype=inputs.dtype)
 
     def _sample_factor(self, inputs):
-        return tf.cast(K.switch(K.less(tf.squeeze(inputs[0]), 0),
-                                tf.random.uniform((1,), self.min_factor, self.max_factor, dtype='int32'),
-                                tf.random.uniform((1,), self.min_factor, self.max_factor_dilate, dtype='int32')),
-                       dtype='float32')
+        return tf.cast(ops.switch(ops.less(tf.squeeze(inputs[0]), 0),
+                                  tf.random.uniform(
+            (1,), self.min_factor, self.max_factor, dtype='int32'),
+            tf.random.uniform((1,), self.min_factor, self.max_factor_dilate, dtype='int32')),
+            dtype='float32')
 
     def _single_blur(self, inputs):
         # dilate...
-        new_mask = K.switch(K.greater(tf.squeeze(inputs[2]), 1 - self.prob + 0.001),
-                            tf.cast(tf.greater(tf.squeeze(self.convnd(tf.expand_dims(inputs[0], 0), inputs[1],
-                                    [1] * (self.n_dims + 2), padding='SAME'), axis=0), 0.01), dtype='float32'),
-                            inputs[0])
+        new_mask = ops.switch(ops.greater(tf.squeeze(inputs[2]), 1 - self.prob + 0.001),
+                              tf.cast(tf.greater(tf.squeeze(self.convnd(tf.expand_dims(inputs[0], 0), inputs[1],
+                                                                        [1] * (self.n_dims + 2), padding='SAME'), axis=0), 0.01), dtype='float32'),
+                              inputs[0])
         # ...or erode
-        new_mask = K.switch(K.less(tf.squeeze(inputs[2]), - (1 - self.prob + 0.001)),
-                            1 - tf.cast(tf.greater(tf.squeeze(self.convnd(tf.expand_dims(1 - new_mask, 0), inputs[1],
-                                        [1] * (self.n_dims + 2), padding='SAME'), axis=0), 0.01), dtype='float32'),
-                            new_mask)
+        new_mask = ops.switch(ops.less(tf.squeeze(inputs[2]), - (1 - self.prob + 0.001)),
+                              1 - tf.cast(tf.greater(tf.squeeze(self.convnd(tf.expand_dims(1 - new_mask, 0), inputs[1],
+                                                                            [1] * (self.n_dims + 2), padding='SAME'), axis=0), 0.01), dtype='float32'),
+                              new_mask)
         return new_mask
 
     def compute_output_shape(self, input_shape):
